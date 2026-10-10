@@ -133,6 +133,17 @@
 .spotify-control__actions button { min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: #0d2028; color: var(--text); cursor: pointer; }
 .spotify-control__actions button:nth-child(2) { color: var(--lime); border-color: #d9ff7855; }
 .spotify-control--disconnected .button { margin-top: 10px; }
+.spotify-control__playlist { margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffffff12; }
+.spotify-control__playlist-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.spotify-control__playlist-head a { min-width: 0; color: var(--cyan); font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; }
+.spotify-control__playlist-head button { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--muted); padding: 5px 7px; font: 9px 'DM Mono', monospace; cursor: pointer; }
+.spotify-control__playlist-list { display: grid; gap: 5px; max-height: 190px; overflow: auto; margin-top: 8px; }
+.spotify-control__playlist-row { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; padding: 5px 0; border-bottom: 1px solid #ffffff0a; }
+.spotify-control__playlist-row > strong { color: var(--muted); font: 9px 'DM Mono', monospace; }
+.spotify-control__playlist-row span { min-width: 0; }
+.spotify-control__playlist-row b, .spotify-control__playlist-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spotify-control__playlist-row b { font-size: 10px; }
+.spotify-control__playlist-row small { color: var(--muted); font: 9px 'DM Mono', monospace; margin-top: 2px; }
 .qr-open-button { margin-top: 8px; }
 .qr-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #041217cc; }
 .qr-modal__card { width: min(380px, 100%); display: grid; justify-items: center; gap: 14px; padding: 28px; text-align: center; border: 1px solid #d9ff7855; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0009; }

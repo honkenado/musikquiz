@@ -322,7 +322,7 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
     const redirectUri = window.location.href.split("?")[0];
     window.sessionStorage.setItem("musikquiz-spotify-verifier", verifier);
     window.sessionStorage.setItem("musikquiz-spotify-state", state);
-    const params = new URLSearchParams({ response_type: "code", client_id: spotifyClientId, scope: "playlist-modify-private user-read-playback-state user-modify-playback-state", redirect_uri: redirectUri, state, show_dialog: "true", code_challenge_method: "S256", code_challenge: challenge });
+    const params = new URLSearchParams({ response_type: "code", client_id: spotifyClientId, scope: "playlist-modify-private playlist-read-private playlist-read-collaborative user-read-playback-state user-modify-playback-state", redirect_uri: redirectUri, state, show_dialog: "true", code_challenge_method: "S256", code_challenge: challenge });
     window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
   };
 
@@ -369,21 +369,47 @@ function HostSessionPanel({ started, onStart }: { started: boolean; onStart: () 
   return <div className="host-session-panel"><div className="eyebrow">TV-LÄGE</div><p className="muted">Öppna TV-fönstret för rumskod och QR-kod.</p><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><button className="button button--outline button--wide" disabled={started} onClick={onStart}>{started ? "QUIZET ÄR STARTAT" : "STARTA QUIZ"}</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><SpotifyControlPanel /></div>;
 }
 
-function SpotifyControlPanel() {
-  const [connected, setConnected] = useState(false);
-  const [track, setTrack] = useState<{ title: string; artist: string; playing: boolean; device: string } | null>(null);
-  const [status, setStatus] = useState("");
-  const openConnect = () => { window.location.assign("/admin?spotify=connect"); };
-  const loadPlayback = async () => {
-    const accessToken = await refreshSpotifyAccessToken();
-    if (!accessToken) { setConnected(false); return; }
-    setConnected(true);
-    const response = await fetch("https://api.spotify.com/v1/me/player", { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (response.status === 204) { setTrack(null); return; }
-    if (!response.ok) { setConnected(false); setStatus("Spotify behöver kopplas om med uppspelningsbehörighet."); return; }
-    const data = await response.json() as { is_playing?: boolean; device?: { name?: string }; item?: { name?: string; artists?: Array<{ name?: string }> } };
-    if (!data.item) { setTrack(null); return; }
-    setTrack({ title: data.item.name ?? "Okänd låt", artist: data.item.artists?.map(artist => artist.name).filter(Boolean).join(", ") || "Okänd artist", playing: Boolean(data.is_playing), device: data.device?.name ?? "Spotify" });
+  function SpotifyControlPanel() {
+    const [connected, setConnected] = useState(false);
+    const [track, setTrack] = useState<{ title: string; artist: string; playing: boolean; device: string } | null>(null);
+    const [playlist, setPlaylist] = useState<{ id: string; name: string; url: string; tracks: Array<{ title: string; artist: string }> } | null>(null);
+    const [playlistOpen, setPlaylistOpen] = useState(false);
+    const [status, setStatus] = useState("");
+    const playlistIdRef = useRef<string | null>(null);
+    const openConnect = () => { window.location.assign("/admin?spotify=connect"); };
+    const loadPlaylist = async (accessToken: string, playlistId: string) => {
+      if (playlistIdRef.current === playlistId) return;
+      const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok) { setPlaylist(null); playlistIdRef.current = null; return; }
+      const data = await response.json() as {
+        id?: string;
+        name?: string;
+        external_urls?: { spotify?: string };
+        items?: { items?: Array<{ item?: { name?: string; artists?: Array<{ name?: string }> }; track?: { name?: string; artists?: Array<{ name?: string }> } }> };
+        tracks?: { items?: Array<{ track?: { name?: string; artists?: Array<{ name?: string }> } }> };
+      };
+      type SpotifyPlaylistTrack = { name?: string; artists?: Array<{ name?: string }> };
+      const rows: Array<{ item?: SpotifyPlaylistTrack; track?: SpotifyPlaylistTrack }> = [...(data.items?.items ?? []), ...(data.tracks?.items ?? [])] as Array<{ item?: SpotifyPlaylistTrack; track?: SpotifyPlaylistTrack }>;
+      const tracks = rows.map(row => row.item ?? row.track).filter(Boolean).map(item => ({
+        title: item?.name ?? "Okänd låt",
+        artist: item?.artists?.map(artist => artist.name).filter(Boolean).join(", ") || "Okänd artist",
+      }));
+      setPlaylist({ id: data.id ?? playlistId, name: data.name ?? "Spotify-spellista", url: data.external_urls?.spotify ?? `https://open.spotify.com/playlist/${playlistId}`, tracks });
+      playlistIdRef.current = playlistId;
+    };
+    const loadPlayback = async () => {
+      const accessToken = await refreshSpotifyAccessToken();
+      if (!accessToken) { setConnected(false); return; }
+      setConnected(true);
+      const response = await fetch("https://api.spotify.com/v1/me/player", { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (response.status === 204) { setTrack(null); setPlaylist(null); playlistIdRef.current = null; return; }
+      if (!response.ok) { setConnected(false); setStatus("Spotify behöver kopplas om med uppspelningsbehörighet."); return; }
+      const data = await response.json() as { is_playing?: boolean; device?: { name?: string }; context?: { type?: string; uri?: string }; item?: { name?: string; artists?: Array<{ name?: string }> } };
+      const playlistId = data.context?.type === "playlist" ? data.context.uri?.split(":").pop() : null;
+      if (playlistId) await loadPlaylist(accessToken, playlistId);
+      else { setPlaylist(null); playlistIdRef.current = null; }
+      if (!data.item) { setTrack(null); return; }
+      setTrack({ title: data.item.name ?? "Okänd låt", artist: data.item.artists?.map(artist => artist.name).filter(Boolean).join(", ") || "Okänd artist", playing: Boolean(data.is_playing), device: data.device?.name ?? "Spotify" });
   };
   useEffect(() => {
     setConnected(Boolean(readSpotifyToken()));
@@ -402,8 +428,8 @@ function SpotifyControlPanel() {
     await loadPlayback();
   };
   if (!connected) return <div className="spotify-control spotify-control--disconnected"><div className="eyebrow">SPOTIFY</div><p className="muted">Styr musiken från spelledarvyn.</p><button className="button button--outline button--wide" onClick={openConnect}>KOPPLA SPOTIFY</button></div>;
-  return <div className="spotify-control"><div className="eyebrow">SPOTIFY <strong>ANSLUTEN</strong></div>{track ? <><div className="spotify-control__track"><strong>{track.title}</strong><small>{track.artist}</small><small>{track.device}</small></div><div className="spotify-control__actions"><button aria-label="Föregående låt" onClick={() => void control("previous")}>◀◀</button><button aria-label={track.playing ? "Pausa" : "Spela"} onClick={() => void control(track.playing ? "pause" : "play")}>{track.playing ? "Ⅱ" : "▶"}</button><button aria-label="Nästa låt" onClick={() => void control("next")}>▶▶</button></div></> : <p className="muted">Ingen aktiv låt just nu.</p>}{status && <small className="playlist-status">{status}</small>}</div>;
-}
+    return <div className="spotify-control"><div className="eyebrow">SPOTIFY <strong>ANSLUTEN</strong></div>{track ? <><div className="spotify-control__track"><strong>{track.title}</strong><small>{track.artist}</small><small>{track.device}</small></div><div className="spotify-control__actions"><button aria-label="Föregående låt" onClick={() => void control("previous")}>◀◀</button><button aria-label={track.playing ? "Pausa" : "Spela"} onClick={() => void control(track.playing ? "pause" : "play")}>{track.playing ? "Ⅱ" : "▶"}</button><button aria-label="Nästa låt" onClick={() => void control("next")}>▶▶</button></div></> : <p className="muted">Ingen aktiv låt just nu.</p>}{playlist && <div className="spotify-control__playlist"><div className="spotify-control__playlist-head"><a href={playlist.url} target="_blank" rel="noreferrer">{playlist.name} ↗</a><button onClick={() => setPlaylistOpen(value => !value)}>{playlistOpen ? "DÖLJ" : `${playlist.tracks.length} LÅTAR`}</button></div>{playlistOpen && <div className="spotify-control__playlist-list">{playlist.tracks.map((item, index) => <div className="spotify-control__playlist-row" key={`${playlist.id}-${index}`}><strong>{String(index + 1).padStart(2, "0")}</strong><span><b>{item.title}</b><small>{item.artist}</small></span></div>)}</div>}</div>}{status && <small className="playlist-status">{status}</small>}</div>;
+  }
 
 function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {
   return <main className="shell shell--admin"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="admin-nav"><button className="ghost" onClick={onBack}>Spelledarvy</button><button className="ghost" onClick={onLogout}>Logga ut</button></div></header><section className="admin-content"><div className="eyebrow">ADMINVY</div><h1>Frågebank</h1><p className="muted">Skapa frågor med plats och Spotifylänk. Välj sedan vilka frågor som ska användas i quizet.</p><QuestionBankPanel {...bank} showMap /></section></main>;
