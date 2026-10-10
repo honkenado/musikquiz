@@ -95,7 +95,9 @@
 .question-bank .button--wide { margin-top: 7px; }
 .question-bank > small { display: block; color: var(--lime); margin-top: 7px; font: 10px 'DM Mono', monospace; }
 .spotify-preview { color: #64d7ff !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.question-list { display: grid; gap: 6px; max-height: 210px; overflow: auto; margin: 12px 0 4px; padding-top: 8px; border-top: 1px solid #ffffff12; }
+.question-list__toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid #ffffff12; color: var(--muted); font: 10px 'DM Mono', monospace; }
+.question-list__toolbar .button { width: auto; padding: 8px 10px; font-size: 10px; }
+.question-list { display: grid; gap: 6px; max-height: 430px; overflow: auto; margin: 8px 0 4px; padding: 4px 8px 4px 0; }
 .question-list label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #ffffff0c; cursor: pointer; }
 .question-list label input { width: auto; margin: 2px 0 0; accent-color: var(--lime); }
 .question-list span { min-width: 0; }
