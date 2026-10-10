@@ -76,6 +76,10 @@
   stroke-linecap: round;
 }
 
+.map-water-overlay { fill: #244b56; opacity: .34; }
+.map-land-overlay path { fill: #9aa995; opacity: .2; }
+.map-lakes-overlay path { fill: #2b6572; opacity: .76; }
+
 .map-border-lines--country path {
   stroke: #c0d0a6;
   stroke-width: 1px;

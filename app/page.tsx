@@ -5,6 +5,8 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import countryBorders from "./data/country-borders.json";
 import usStates from "./data/us-states.json";
+import countries from "./data/countries.json";
+import lakes from "./data/lakes.json";
 
 type Guess = { name: string; color: string; x: number; y: number; km?: number };
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
@@ -74,6 +76,10 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       };
       const countryFeatures = Array.isArray((countryBorders as { features?: unknown[] }).features) ? (countryBorders as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
       const stateFeatures = Array.isArray((usStates as { features?: unknown[] }).features) ? (usStates as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const landFeatures = Array.isArray((countries as { features?: unknown[] }).features) ? (countries as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const lakeFeatures = Array.isArray((lakes as { features?: unknown[] }).features) ? (lakes as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const landPaths = landFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean);
+      const lakePaths = lakeFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean);
       ["water"].forEach(layerId => {
         if (map.getLayer(layerId)) {
           map.setPaintProperty(layerId, "fill-color", "#174b56");
@@ -91,7 +97,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
         : [];
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
-      svg.innerHTML = `<g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
+      svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%"/><g class="map-land-overlay">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };
     map.on("load", drawBorders);
     map.on("idle", drawBorders);
