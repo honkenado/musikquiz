@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
 
 type Guess = { name: string; color: string; x: number; y: number; km?: number };
+type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 const players: Guess[] = [
   { name: "Maja", color: "#ff6b4a", x: 39, y: 43, km: 118 },
   { name: "Oskar", color: "#64d7ff", x: 47, y: 49, km: 842 },
@@ -11,23 +14,56 @@ const players: Guess[] = [
 ];
 
 function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: number; guesses: Guess[]; onPick?: (x: number, y: number) => void; selected?: { x: number; y: number }; compact?: boolean }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
   const answer = { x: 42, y: 45 };
-  return <div className={`map ${compact ? "map--compact" : ""}`} onClick={e => { if (!onPick) return; const r = e.currentTarget.getBoundingClientRect(); onPick(Math.round(((e.clientX-r.left)/r.width)*100), Math.round(((e.clientY-r.top)/r.height)*100)); }}>
-    <svg viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true" className="map__art">
-      <defs><pattern id="grid" width="58" height="58" patternUnits="userSpaceOnUse"><path d="M58 0H0V58" fill="none" stroke="#ffffff" strokeOpacity=".055" /></pattern></defs>
-      <rect width="1000" height="560" fill="url(#grid)" />
-      <g fill="#173b46" stroke="#2b6470" strokeWidth="2">
-        <path d="M85 155l70-55 87 12 35 51-32 47-66 12-30 57-50-33-25-55z"/><path d="M262 306l70-35 66 33-12 75-42 41-28 81-42-15-10-88-29-37z"/>
-        <path d="M463 130l52-31 58 19 24 45-30 33-28 2-15 64-38-22-8-54-35-24z"/><path d="M570 230l64-20 75 31 53-12 85 51-39 44-63-9-35 40-84-12-35-45z"/>
-        <path d="M744 370l79-17 66 50-28 45-80 14-52-38z"/><path d="M820 122l45-26 58 20 18 47-46 17-46-17z"/>
-      </g>
-    </svg>
-    <div className="map__labels"><span>ATLANTEN</span><span>STILLA HAVET</span><span>INDISKA OCEANEN</span></div>
-    {selected && <div className="pin pin--selected" style={{ left: `${selected.x}%`, top: `${selected.y}%` }}><span>DU</span></div>}
-    {reveal >= 1 && guesses.map(g => <div key={g.name} className="pin pin--player" style={{ left: `${g.x}%`, top: `${g.y}%`, background: g.color }} title={g.name}><span>{g.name}</span></div>)}
-    {reveal >= 2 && <div className="pin pin--answer" style={{ left: `${answer.x}%`, top: `${answer.y}%` }}><span>FACIT</span></div>}
-    {reveal >= 3 && guesses.map(g => <div className="route" key={`route-${g.name}`} style={{ left: `${g.x}%`, top: `${g.y}%`, width: `${Math.hypot((answer.x-g.x)*.93, (answer.y-g.y))*1.05}%`, transform: `rotate(${Math.atan2(answer.y-g.y, answer.x-g.x)*180/Math.PI}deg)` }} />)}
-  </div>;
+  const toLngLat = (point: { x: number; y: number }) => [point.x * 3.6 - 180, 90 - point.y * 1.8] as [number, number];
+  const toPercent = (lng: number, lat: number) => ({ x: Math.round((lng + 180) / 3.6), y: Math.round((90 - lat) / 1.8) });
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: {
+        version: 8,
+        sources: { carto: { type: "raster", tiles: ["https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"], tileSize: 256, attribution: "© OpenStreetMap © CARTO" } },
+        layers: [{ id: "background", type: "background", paint: { "background-color": "#091a22" } }, { id: "carto", type: "raster", source: "carto", paint: { "raster-opacity": 0.92, "raster-saturation": -0.35, "raster-contrast": 0.18 } }],
+      },
+      center: [0, 18], zoom: 1.15, minZoom: 1, maxZoom: 6,
+      attributionControl: false, dragRotate: false, touchPitch: false,
+    });
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    mapRef.current = map;
+    if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
+    return () => { markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
+  }, [onPick]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const render = () => {
+      markersRef.current.forEach(marker => marker.remove());
+      markersRef.current = [];
+      const addMarker = (point: { x: number; y: number }, className: string, label: string, color?: string) => {
+        const element = document.createElement("div");
+        element.className = `map-pin ${className}`;
+        if (color) element.style.setProperty("--pin-color", color);
+        element.innerHTML = `<span>${label}</span>`;
+        markersRef.current.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(toLngLat(point)).addTo(map));
+      };
+      if (selected) addMarker(selected, "map-pin--selected", "DU");
+      if (reveal >= 1) guesses.forEach(guess => addMarker(guess, "map-pin--player", guess.name, guess.color));
+      if (reveal >= 2) addMarker(answer, "map-pin--answer", "FACIT");
+      const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answer)] }, properties: {} })) : [] } as RouteData;
+      if (map.getSource("routes")) (map.getSource("routes") as maplibregl.GeoJSONSource).setData(routeData);
+      else { map.addSource("routes", { type: "geojson", data: routeData }); map.addLayer({ id: "routes", type: "line", source: "routes", paint: { "line-color": "#d9ff78", "line-width": 1.5, "line-opacity": 0.7, "line-dasharray": [2, 2] } }); }
+      if (reveal >= 3) { const bounds = new maplibregl.LngLatBounds(toLngLat(answer), toLngLat(answer)); guesses.forEach(guess => bounds.extend(toLngLat(guess))); map.fitBounds(bounds, { padding: 80, maxZoom: 3.2, duration: 700 }); }
+    };
+    if (map.loaded()) render(); else map.once("load", render);
+  }, [reveal, guesses, selected]);
+
+  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta" />;
 }
 
 export default function Home() {

@@ -2,6 +2,16 @@
   min-height: 100dvh;
 }
 
+.map--real .maplibregl-canvas { outline: none; }
+.map--real .maplibregl-ctrl-attrib { background: #081218cc; color: #8aa1a8; font: 9px 'DM Mono', monospace; }
+.map--real .maplibregl-ctrl-attrib a { color: #b7c9c4; }
+.map-pin { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; background: var(--pin-color, var(--orange)); border: 2px solid #fff; transform: rotate(-45deg); box-shadow: 0 0 0 4px #ffffff26, 0 0 18px #0009; pointer-events: none; }
+.map-pin span { position: absolute; transform: rotate(45deg); left: 17px; top: -11px; color: #fff; white-space: nowrap; font: 11px 'DM Mono', monospace; font-weight: 600; text-shadow: 0 1px 4px #000; }
+.map-pin--selected { --pin-color: var(--orange); width: 23px; height: 23px; box-shadow: 0 0 0 7px #ff6b4a38, 0 0 26px #ff6b4a99; animation: pin-pulse 1.7s ease-in-out infinite; }
+.map-pin--selected span { color: var(--orange); }
+.map-pin--answer { --pin-color: var(--lime); width: 24px; height: 24px; box-shadow: 0 0 0 7px #d9ff7840, 0 0 28px #d9ff78aa; }
+.map-pin--answer span { color: var(--lime); }
+
 .map--compact {
   touch-action: none;
   user-select: none;
