@@ -17,6 +17,7 @@ const players: Guess[] = [
 
 function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: number; guesses: Guess[]; onPick?: (x: number, y: number) => void; selected?: { x: number; y: number }; compact?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const bordersRef = useRef<SVGSVGElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const answer = { x: 42, y: 45 };
@@ -46,14 +47,36 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         map.setPaintProperty("boundary_3", "line-opacity", 0.68);
         map.setPaintProperty("boundary_3", "line-width", ["interpolate", ["linear"], ["zoom"], 2.8, 0.9, 8, 1.5, 12, 2.4]);
       }
-      map.addSource("quiz-country-borders", { type: "geojson", data: countryBorders });
-      map.addLayer({ id: "quiz-country-borders", type: "line", source: "quiz-country-borders", minzoom: 1, paint: { "line-color": "#d9ff78", "line-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.42, 3, 0.7, 6, 0.9], "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.7, 4, 1.15, 8, 1.8] } });
-      map.addSource("quiz-us-states", { type: "geojson", data: usStates });
-      map.addLayer({ id: "quiz-us-states", type: "line", source: "quiz-us-states", minzoom: 2.8, paint: { "line-color": "#64d7ff", "line-opacity": 0.9, "line-width": ["interpolate", ["linear"], ["zoom"], 2.8, 0.9, 6, 1.5, 10, 2.2] } });
     });
     mapRef.current = map;
+    const drawBorders = () => {
+      const svg = bordersRef.current;
+      const container = containerRef.current;
+      if (!svg || !container) return;
+      const project = (coordinate: [number, number]) => {
+        const point = map.project(coordinate);
+        return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
+      };
+      const pathFor = (coordinates: unknown, close = false): string => {
+        if (!Array.isArray(coordinates) || coordinates.length === 0) return "";
+        if (typeof coordinates[0]?.[0] === "number") {
+          const points = (coordinates as [number, number][]).map(project).join(" L");
+          return `M${points}${close ? " Z" : ""}`;
+        }
+        return (coordinates as unknown[]).map(item => pathFor(item, close)).join(" ");
+      };
+      const paths = (countryBorders.features as Array<{ geometry: { type: string; coordinates: unknown } }>).map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean);
+      const statePaths = map.getZoom() >= 2.8
+        ? (usStates.features as Array<{ geometry: { type: string; coordinates: unknown } }>).map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
+        : [];
+      svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
+      svg.innerHTML = `<g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
+    };
+    map.on("load", drawBorders);
+    map.on("move", drawBorders);
+    map.on("resize", drawBorders);
     if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
-    return () => { markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
+    return () => { map.off("load", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
   }, [onPick]);
 
   useEffect(() => {
@@ -80,7 +103,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (map.loaded()) render(); else map.once("load", render);
   }, [reveal, guesses, selected]);
 
-  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta" />;
+  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta"><svg ref={bordersRef} className="map-borders-overlay" aria-hidden="true" /></div>;
 }
 
 export default function Home() {
