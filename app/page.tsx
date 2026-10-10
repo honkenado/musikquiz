@@ -33,16 +33,16 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     map.once("load", () => {
       map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none"));
       if (map.getLayer("boundary_2")) {
-        map.setLayerZoomRange("boundary_2", 2.2, 24);
-        map.setPaintProperty("boundary_2", "line-color", "#9db8bd");
-        map.setPaintProperty("boundary_2", "line-opacity", 0.78);
-        map.setPaintProperty("boundary_2", "line-width", ["interpolate", ["linear"], ["zoom"], 2.2, 0.7, 5, 1.3, 10, 2.2]);
+        map.setLayerZoomRange("boundary_2", 1, 24);
+        map.setPaintProperty("boundary_2", "line-color", "#d9ff78");
+        map.setPaintProperty("boundary_2", "line-opacity", 0.72);
+        map.setPaintProperty("boundary_2", "line-width", ["interpolate", ["linear"], ["zoom"], 1, 0.9, 4, 1.35, 10, 2.2]);
       }
       if (map.getLayer("boundary_3")) {
-        map.setLayerZoomRange("boundary_3", 4.5, 24);
-        map.setPaintProperty("boundary_3", "line-color", "#d9ff78");
-        map.setPaintProperty("boundary_3", "line-opacity", 0.55);
-        map.setPaintProperty("boundary_3", "line-width", ["interpolate", ["linear"], ["zoom"], 4.5, 0.8, 8, 1.5, 12, 2.4]);
+        map.setLayerZoomRange("boundary_3", 2.8, 24);
+        map.setPaintProperty("boundary_3", "line-color", "#64d7ff");
+        map.setPaintProperty("boundary_3", "line-opacity", 0.68);
+        map.setPaintProperty("boundary_3", "line-width", ["interpolate", ["linear"], ["zoom"], 2.8, 0.9, 8, 1.5, 12, 2.4]);
       }
     });
     mapRef.current = map;
