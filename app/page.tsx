@@ -473,9 +473,10 @@ export default function Home() {
     if (!user || !questionPrompt.trim() || !questionPoint || !questionSpotifyUrl.trim()) return;
     setQuestionStatus("SPARAR...");
     const spotifyTrackId = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/)?.[1] ?? null;
-    const { data, error } = await supabase.from("quiz_questions").insert({ owner_id: user.id, prompt: questionPrompt.trim(), place_label: questionPlaceQuery.trim(), latitude: questionPoint.latitude, longitude: questionPoint.longitude, spotify_url: questionSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, spotify_title: spotifyPreview?.title ?? null, spotify_artist: spotifyPreview?.artist ?? null }).select("id,prompt,place_label,latitude,longitude,spotify_url,spotify_title,spotify_artist").single();
-    if (error || !data) { setQuestionStatus("KUNDE INTE SPARA FRÅGAN"); return; }
-    setQuestions(current => [data as QuizQuestion, ...current]);
+    const { error } = await supabase.from("quiz_questions").insert({ owner_id: user.id, prompt: questionPrompt.trim(), place_label: questionPlaceQuery.trim(), latitude: questionPoint.latitude, longitude: questionPoint.longitude, spotify_url: questionSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, spotify_title: spotifyPreview?.title ?? null, spotify_artist: spotifyPreview?.artist ?? null });
+    if (error) { setQuestionStatus(error.code === "42501" ? "KUNDE INTE SPARA: LOGGA IN IGEN" : `KUNDE INTE SPARA: ${error.message}`); return; }
+    const { data: refreshed } = await supabase.from("quiz_questions").select("id,prompt,place_label,latitude,longitude,spotify_url,spotify_title,spotify_artist").order("created_at", { ascending: false });
+    if (refreshed) setQuestions(refreshed as QuizQuestion[]);
     setQuestionPrompt(""); setQuestionPlaceQuery(""); setQuestionPoint(null); setQuestionSpotifyUrl(""); setSpotifyPreview(null); setQuestionStatus("FRÅGAN SPARAD");
   };
 
