@@ -147,6 +147,8 @@
 .quiz-category-form input { min-width: 0; }
 .quiz-order-item--category { border-color: #d9ff7866; background: #d9ff7814; }
 .quiz-order-item--category .quiz-order-title b { color: var(--lime); }
+.quiz-order-remove { margin: 0; padding: 0 4px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.quiz-order-remove:hover { color: var(--lime); }
 .spotify-config-note, .playlist-status { display: block; margin-top: 8px; color: var(--muted) !important; line-height: 1.45; }
 .playlist-status { color: var(--lime) !important; }
 .playlist-link { display: block; margin-top: 10px; color: var(--lime); font: 11px 'DM Mono', monospace; text-decoration: none; }
