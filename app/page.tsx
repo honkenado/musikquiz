@@ -44,9 +44,9 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         map.setPaintProperty("boundary_3", "line-opacity", 0.68);
         map.setPaintProperty("boundary_3", "line-width", ["interpolate", ["linear"], ["zoom"], 2.8, 0.9, 8, 1.5, 12, 2.4]);
       }
-      map.addSource("quiz-country-borders", { type: "geojson", data: "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_boundary_lines_land.geojson" });
+      map.addSource("quiz-country-borders", { type: "geojson", data: "/data/country-borders.geojson" });
       map.addLayer({ id: "quiz-country-borders", type: "line", source: "quiz-country-borders", minzoom: 1, paint: { "line-color": "#d9ff78", "line-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.42, 3, 0.7, 6, 0.9], "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.7, 4, 1.15, 8, 1.8] } });
-      map.addSource("quiz-us-states", { type: "geojson", data: "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json" });
+      map.addSource("quiz-us-states", { type: "geojson", data: "/data/us-states.geojson" });
       map.addLayer({ id: "quiz-us-states", type: "line", source: "quiz-us-states", minzoom: 2.8, paint: { "line-color": "#64d7ff", "line-opacity": 0.9, "line-width": ["interpolate", ["linear"], ["zoom"], 2.8, 0.9, 6, 1.5, 10, 2.2] } });
     });
     mapRef.current = map;
