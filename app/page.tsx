@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { supabase } from "./supabase";
 import countryBorders from "./data/country-borders.json";
 import admin1Lines from "./data/admin1-lines.json";
 import countries from "./data/countries.json";
@@ -11,12 +12,14 @@ import lakes from "./data/lakes.json";
 type Guess = { name: string; color: string; x: number; y: number };
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#ff9ee8", "#8fb8ff", "#ffb86b"];
-const initialPlayers: Guess[] = [
-  { name: "Maja", color: playerColors[0], x: 39, y: 43 },
-  { name: "Oskar", color: playerColors[1], x: 47, y: 49 },
-  { name: "Nora", color: playerColors[2], x: 57, y: 37 },
-  { name: "Viktor", color: playerColors[3], x: 33, y: 53 },
-];
+const initialPlayers: Guess[] = [];
+const roomChannelName = "musikquiz-room-nord-7k";
+
+const upsertPlayer = (current: Guess[], incoming: Guess) => {
+  const existingIndex = current.findIndex(player => player.name.toLowerCase() === incoming.name.toLowerCase());
+  if (existingIndex < 0) return [...current, incoming];
+  return current.map((player, index) => index === existingIndex ? { ...player, ...incoming } : player);
+};
 
 const answer = { x: 42, y: 45 };
 const toLngLat = (point: { x: number; y: number }) => [point.x * 3.6 - 180, 90 - point.y * 1.8] as [number, number];
@@ -158,71 +161,85 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
 }
 
 export default function Home() {
-  const getStoredRoom = (): { round: number; reveal: number; players: Guess[] } => {
-    if (typeof window === "undefined") return { round: 4, reveal: 0, players: initialPlayers };
-    try {
-      const stored = window.localStorage.getItem("musikquiz:nord-7k");
-      if (!stored) return { round: 4, reveal: 0, players: initialPlayers };
-      const room = JSON.parse(stored) as { round?: number; reveal?: number; players?: Guess[] };
-      return {
-        round: typeof room.round === "number" ? room.round : 4,
-        reveal: typeof room.reveal === "number" ? room.reveal : 0,
-        players: Array.isArray(room.players) ? room.players : initialPlayers,
-      };
-    } catch {
-      return { round: 4, reveal: 0, players: initialPlayers };
-    }
-  };
-  const [storedRoom] = useState(getStoredRoom);
   const [mode, setMode] = useState<"host" | "player">("host");
-  const [reveal, setReveal] = useState(storedRoom.reveal);
-  const [round, setRound] = useState(storedRoom.round);
+  const [reveal, setReveal] = useState(0);
+  const [round, setRound] = useState(4);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
   const [locked, setLocked] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [joined, setJoined] = useState(false);
-  const [players, setPlayers] = useState<Guess[]>(storedRoom.players);
+  const [players, setPlayers] = useState<Guess[]>(initialPlayers);
+  const [connectionStatus, setConnectionStatus] = useState("ANSLUTER");
+  const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const roomCode = "NORD 7K";
   const ready = players.length;
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players]);
+  const roomStateRef = useRef({ round, reveal, players });
 
   useEffect(() => {
-    const room = JSON.stringify({ round, reveal, players });
-    window.localStorage.setItem("musikquiz:nord-7k", room);
-    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("musikquiz:nord-7k");
-    channel?.postMessage(room);
-    return () => channel?.close();
+    roomStateRef.current = { round, reveal, players };
   }, [round, reveal, players]);
 
   useEffect(() => {
-    if (typeof BroadcastChannel === "undefined") return;
-    const channel = new BroadcastChannel("musikquiz:nord-7k");
-    channel.onmessage = event => {
-      try {
-        const room = JSON.parse(event.data as string) as { round?: number; reveal?: number; players?: Guess[] };
-        if (Array.isArray(room.players)) setPlayers(room.players);
-        if (typeof room.round === "number") setRound(room.round);
-        if (typeof room.reveal === "number") setReveal(room.reveal);
-      } catch { /* Ignore malformed room updates. */ }
+    const channel = supabase
+      .channel(roomChannelName)
+      .on("broadcast", { event: "room_request" }, () => {
+        if (mode !== "host") return;
+        void channel.send({ type: "broadcast", event: "room_state", payload: { ...roomStateRef.current, source: "host" } });
+      })
+      .on("broadcast", { event: "room_state" }, ({ payload }) => {
+        if (mode === "host" || payload?.source !== "host") return;
+        if (Array.isArray(payload.players)) setPlayers(payload.players as Guess[]);
+        if (typeof payload.round === "number") setRound(payload.round);
+        if (typeof payload.reveal === "number") setReveal(payload.reveal);
+      })
+      .on("broadcast", { event: "player_joined" }, ({ payload }) => {
+        if (payload?.player?.name) setPlayers(current => upsertPlayer(current, payload.player as Guess));
+      })
+      .on("broadcast", { event: "guess_submitted" }, ({ payload }) => {
+        if (payload?.player?.name) setPlayers(current => upsertPlayer(current, payload.player as Guess));
+      })
+      .subscribe(status => {
+        if (status === "SUBSCRIBED") {
+          setConnectionStatus("ANSLUTEN");
+          if (mode === "player") void channel.send({ type: "broadcast", event: "room_request", payload: { sessionId } });
+          else void channel.send({ type: "broadcast", event: "room_state", payload: { ...roomStateRef.current, source: "host" } });
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setConnectionStatus("OFFLINE");
+        }
+      });
+    channelRef.current = channel;
+    return () => {
+      if (channelRef.current === channel) channelRef.current = null;
+      void supabase.removeChannel(channel);
     };
-    return () => channel.close();
-  }, []);
+  }, [mode, roomCode, sessionId]);
+
+  useEffect(() => {
+    if (mode !== "host" || !channelRef.current) return;
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { round, reveal, players, source: "host" } });
+  }, [mode, round, reveal, players]);
 
   const joinRoom = () => {
     const baseName = playerName.trim().slice(0, 24);
-    if (!baseName) return;
+    if (!baseName || connectionStatus === "OFFLINE") return;
     let uniqueName = baseName;
     let suffix = 2;
     while (players.some(player => player.name.toLowerCase() === uniqueName.toLowerCase())) uniqueName = `${baseName} ${suffix++}`;
     setPlayerName(uniqueName);
-    setPlayers(current => current.some(player => player.name.toLowerCase() === uniqueName.toLowerCase())
-      ? current
-      : [...current, { name: uniqueName, color: playerColors[current.length % playerColors.length], x: picked.x, y: picked.y }]);
+    const player = { name: uniqueName, color: playerColors[players.length % playerColors.length], x: picked.x, y: picked.y };
+    setPlayers(current => upsertPlayer(current, player));
+    void channelRef.current?.send({ type: "broadcast", event: "player_joined", payload: { player, sessionId } });
     setJoined(true);
   };
 
   const lockGuess = () => {
-    setPlayers(current => current.map(player => player.name === playerName ? { ...player, x: picked.x, y: picked.y } : player));
+    const player = players.find(candidate => candidate.name === playerName);
+    if (!player) return;
+    const updatedPlayer = { ...player, x: picked.x, y: picked.y };
+    setPlayers(current => upsertPlayer(current, updatedPlayer));
+    void channelRef.current?.send({ type: "broadcast", event: "guess_submitted", payload: { player: updatedPlayer, sessionId } });
     setLocked(true);
   };
 
@@ -234,7 +251,7 @@ export default function Home() {
   };
 
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
-    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skriv ditt namn för att ansluta till quizet.</p><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" autoFocus /><button className="button button--primary button--wide" disabled={!playerName.trim()} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKOD <strong>{roomCode}</strong></div></> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={0} guesses={[]} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(90 - picked.y * 1.8)}°N, {Math.round(picked.x * 3.6 - 180)}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : "LÅS SVAR"}</button></div></>}
+    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skriv ditt namn för att ansluta till quizet.</p><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" autoFocus /><button className="button button--primary button--wide" disabled={!playerName.trim()} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKOD <strong>{roomCode}</strong></div></> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(90 - picked.y * 1.8)}°N, {Math.round(picked.x * 3.6 - 180)}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
 
   return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><h1>AW<br/><em>Geografisk</em><br/>edition</h1><div className="round-card"><span>AKTIV OMGÅNG</span><strong>{String(round).padStart(2,"0")}</strong><small>av 10</small></div><div className="progress"><span style={{width:`${Math.min(round*10, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>KLAR</b></div>)}</div><div className="host-tip"><span>♫</span><div><strong>Spela musiken</strong><small>Frågan ställs utanför appen.</small></div></div></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · OMGÅNG {String(round).padStart(2,"0")}</div><h2>Var i världen?</h2></div><div className="phase"><span className="phase-dot"/> {reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "FACIT VISAS" : "RESULTAT"}</div></div><Map reveal={reveal} guesses={players}/><div className="reveal-controls"><button className="button button--outline" disabled={reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} onClick={()=>setReveal(1)}>{reveal >= 1 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "RÄTT PLATS VISAS ✓" : "VISA RÄTT PLATS"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={reveal < 2} onClick={()=>setReveal(3)}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">OMGÅNGSRESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA OMGÅNG →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
