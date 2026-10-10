@@ -162,6 +162,25 @@
 .question-image--host { width: min(320px, 100%); max-height: 150px; margin-top: 12px; }
 .question-image--player { width: min(460px, 100%); max-height: 220px; margin: 16px auto; }
 .question-image--tv { width: min(520px, 100%); max-height: 240px; margin: 18px auto 0; }
+.followup-editor { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.followup-editor > strong { font-size: 15px; }
+.followup-editor .muted { margin: 0; }
+.followup-fields { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 8px; }
+.followup-list { display: grid; gap: 6px; max-height: 180px; overflow: auto; margin-top: 4px; }
+.followup-list__item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #ffffff0d; }
+.followup-list__item span { min-width: 0; display: grid; gap: 3px; }
+.followup-list__item b, .followup-list__item small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.followup-list__item b { color: var(--lime); font-size: 11px; }
+.followup-list__item small { color: var(--text); font-size: 12px; }
+.followup-list__item em { color: var(--muted); font: 10px 'DM Mono', monospace; white-space: nowrap; }
+.followup-host-panel { display: grid; gap: 10px; margin-top: 16px; padding: 16px; border: 1px solid #d9ff7844; border-radius: 8px; background: #d9ff780d; }
+.followup-host-panel > .muted { margin: 0; }
+.followup-score-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #ffffff12; }
+.followup-score-row > span { min-width: 0; display: grid; gap: 4px; }
+.followup-score-row b, .followup-score-row small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.followup-score-row small { color: var(--muted); }
+.followup-score-row > div { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.followup-score-row .button { min-width: 40px; padding: 8px 9px; }
 .question-editor-map { min-width: 0; padding: 16px; border: 1px solid #64d7ff33; border-radius: 10px; background: #64d7ff08; }
 .question-editor-map .muted { margin: 8px 0 12px; font-size: 12px; }
 .question-editor-map .map-shell { aspect-ratio: 1.35; min-height: 320px; }

@@ -11,10 +11,11 @@ import countries from "./data/countries.json";
 import lakes from "./data/lakes.json";
 import type QrScanner from "qr-scanner";
 
-type Guess = { name: string; color: string; x: number; y: number; score?: number; locked?: boolean };
+type Guess = { name: string; color: string; x: number; y: number; score?: number; locked?: boolean; followupAnswer?: string; followupLocked?: boolean; followupAwarded?: boolean };
 type QuizQuestion = { id: string; prompt: string; place_label: string; latitude: number; longitude: number; content_type: "music" | "sport" | "image" | "other"; image_url: string | null; spotify_url: string; spotify_title: string | null; spotify_artist: string | null };
+type FollowUpQuestion = { id: string; owner_id: string; parent_question_id: string; prompt: string; answer_type: "text" | "yes_no" | "choice"; image_url: string | null; spotify_url: string; spotify_title: string | null; spotify_artist: string | null; points: number; sort_order: number };
 type QuizOrderItem = { type: "question"; id: string } | { type: "category"; id: string; title: string };
-type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; contentType: QuizQuestion["content_type"]; setContentType: (value: QuizQuestion["content_type"]) => void; imageUrl: string; setImageUrl: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; orderItems: QuizOrderItem[]; setOrderItems: Dispatch<SetStateAction<QuizOrderItem[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
+type QuestionBankPanelProps = { questions: QuizQuestion[]; followups: FollowUpQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; contentType: QuizQuestion["content_type"]; setContentType: (value: QuizQuestion["content_type"]) => void; imageUrl: string; setImageUrl: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; followupParentId: string; setFollowupParentId: (value: string) => void; followupPrompt: string; setFollowupPrompt: (value: string) => void; followupImageUrl: string; setFollowupImageUrl: (value: string) => void; followupSpotifyUrl: string; setFollowupSpotifyUrl: (value: string) => void; followupPoints: string; setFollowupPoints: (value: string) => void; followupStatus: string; saveFollowup: () => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; orderItems: QuizOrderItem[]; setOrderItems: Dispatch<SetStateAction<QuizOrderItem[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
 type AppMode = "host" | "player" | "admin" | "tv";
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 type MapRef = { current: maplibregl.Map | null };
@@ -255,10 +256,11 @@ function OverlayMarker({ mapRef, point, className, label, color }: { mapRef: Map
   return <div ref={markerRef} className={`map-pin ${className}`} aria-hidden="true"><span>{label}</span></div>;
 }
 
-function QuestionBankPanel({ questions, prompt, setPrompt, setPlace, place, contentType, setContentType, imageUrl, setImageUrl, spotifyUrl, setSpotifyUrl, point, setPoint, preview, status, selectedIds, setSelectedIds, orderItems, setOrderItems, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
+function QuestionBankPanel({ questions, followups, prompt, setPrompt, setPlace, place, contentType, setContentType, imageUrl, setImageUrl, spotifyUrl, setSpotifyUrl, followupParentId, setFollowupParentId, followupPrompt, setFollowupPrompt, followupImageUrl, setFollowupImageUrl, followupSpotifyUrl, setFollowupSpotifyUrl, followupPoints, setFollowupPoints, followupStatus, saveFollowup, point, setPoint, preview, status, selectedIds, setSelectedIds, orderItems, setOrderItems, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
   const allSelected = questions.length > 0 && selectedIds.length === questions.length;
   const orderedItems = orderItems.filter(item => item.type === "category" || selectedIds.includes(item.id));
   const orderedSelectedQuestions = orderedItems.filter((item): item is Extract<QuizOrderItem, { type: "question" }> => item.type === "question").map(item => questions.find(question => question.id === item.id)).filter((question): question is QuizQuestion => Boolean(question));
+  const orderedSelectedFollowups = orderedSelectedQuestions.flatMap(question => followups.filter(followup => followup.parent_question_id === question.id).sort((a, b) => a.sort_order - b.sort_order));
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [categoryTitle, setCategoryTitle] = useState("");
   const [spotifyConnected, setSpotifyConnected] = useState(false);
@@ -333,8 +335,8 @@ function QuestionBankPanel({ questions, prompt, setPrompt, setPlace, place, cont
   const createSpotifyPlaylist = async () => {
     if (!orderedSelectedQuestions.length) return;
     if (!spotifyConnected) { await connectSpotify(); return; }
-    const uris = orderedSelectedQuestions.map(question => spotifyTrackUri(question.spotify_url)).filter((uri): uri is string => Boolean(uri));
-    if (!uris.length) { setPlaylistStatus("De valda frågorna saknar giltiga Spotifylåtar."); return; }
+    const uris = [...orderedSelectedQuestions.map(question => question.spotify_url), ...orderedSelectedFollowups.map(followup => followup.spotify_url)].map(spotifyTrackUri).filter((uri): uri is string => Boolean(uri));
+    if (!uris.length) { setPlaylistStatus("De valda frågorna och följdfrågorna saknar giltiga Spotifylåtar."); return; }
     setPlaylistStatus("SKAPAR SPELLISTA...");
     try {
       const accessToken = await getSpotifyAccessToken();
@@ -355,10 +357,11 @@ function QuestionBankPanel({ questions, prompt, setPrompt, setPlace, place, cont
     setOrderItems(current => { const next = [...current]; const sourceIndex = next.findIndex(item => item.id === sourceId); const targetIndex = next.findIndex(item => item.id === targetId); if (sourceIndex < 0 || targetIndex < 0) return current; const [moved] = next.splice(sourceIndex, 1); next.splice(targetIndex, 0, moved); return next; });
   };
   const contentTypeLabel = (value: QuizQuestion["content_type"]) => ({ music: "Musik", sport: "Sport", image: "Bild", other: "Annat" })[value];
-  const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny geografifråga</strong><label className="field-label" htmlFor="question-content-type">INNEHÅLLSTYP</label><select id="question-content-type" value={contentType} onChange={e=>setContentType(e.target.value as QuizQuestion["content_type"])}><option value="music">Musik</option><option value="sport">Sport</option><option value="image">Bild</option><option value="other">Annat</option></select><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div>{contentType === "music" ? <><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}</> : <input value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="Bildlänk (valfritt)" type="url" />}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || (contentType === "music" && !spotifyUrl.trim())} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list__toolbar"><span>{questions.length} frågor · {selectedIds.length} valda</span><button className="button button--outline" disabled={!questions.length} onClick={toggleAll}>{allSelected ? "AVMARKERA ALLA" : "VÄLJ ALLA"}</button></div><div className="question-list">{questions.length ? questions.map(question=><label className="question-list__item" key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>toggleQuestion(question.id, event.target.checked)} /><span className="question-list__text"><span className="question-list__track"><strong>{question.content_type === "music" ? question.spotify_title ?? "Spotifylåt" : question.prompt}</strong><small>{question.content_type === "music" ? question.spotify_artist ?? "Artist saknas" : contentTypeLabel(question.content_type)}</small></span><small className="question-list__prompt">{question.prompt}</small><small className="question-list__place">⌖ {question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I QUIZET ({selectedIds.length})</button></div>;
+  const followupPanel = <div className="followup-editor"><div className="eyebrow">FÖLJDFRÅGOR</div><strong>Koppla en följdfråga till en plats</strong><p className="muted">Följdfrågan följer med huvudfrågan i quizordningen och kan ha en egen låt.</p><select value={followupParentId} onChange={event => setFollowupParentId(event.target.value)}><option value="">Välj geografifråga</option>{questions.map(question => <option key={question.id} value={question.id}>{question.place_label} · {question.prompt}</option>)}</select><input value={followupPrompt} onChange={event => setFollowupPrompt(event.target.value)} placeholder="Skriv följdfrågan" /><div className="followup-fields"><input value={followupPoints} onChange={event => setFollowupPoints(event.target.value)} type="number" min="0" max="10" placeholder="Poäng" /><input value={followupImageUrl} onChange={event => setFollowupImageUrl(event.target.value)} placeholder="Bildlänk (valfritt)" type="url" /></div><input value={followupSpotifyUrl} onChange={event => setFollowupSpotifyUrl(event.target.value)} placeholder="Spotifylänk (valfritt)" /><button className="button button--secondary button--wide" disabled={!followupParentId || !followupPrompt.trim()} onClick={saveFollowup}>SPARA FÖLJDFRÅGA</button>{followupStatus && <small>{followupStatus}</small>}<div className="followup-list">{followups.length ? followups.map(followup => <div className="followup-list__item" key={followup.id}><span><b>{questions.find(question => question.id === followup.parent_question_id)?.place_label ?? "Plats"}</b><small>{followup.prompt}</small></span><em>{followup.points} p{followup.spotify_url ? " · ♫" : ""}</em></div>) : <small>Inga följdfrågor ännu.</small>}</div></div>;
+  const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny geografifråga</strong><label className="field-label" htmlFor="question-content-type">INNEHÅLLSTYP</label><select id="question-content-type" value={contentType} onChange={e=>setContentType(e.target.value as QuizQuestion["content_type"])}><option value="music">Musik</option><option value="sport">Sport</option><option value="image">Bild</option><option value="other">Annat</option></select><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div>{contentType === "music" ? <><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}</> : <input value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="Bildlänk (valfritt)" type="url" />}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || (contentType === "music" && !spotifyUrl.trim())} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list__toolbar"><span>{questions.length} frågor · {selectedIds.length} valda</span><button className="button button--outline" disabled={!questions.length} onClick={toggleAll}>{allSelected ? "AVMARKERA ALLA" : "VÄLJ ALLA"}</button></div><div className="question-list">{questions.length ? questions.map(question=><label className="question-list__item" key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>toggleQuestion(question.id, event.target.checked)} /><span className="question-list__text"><span className="question-list__track"><strong>{question.content_type === "music" ? question.spotify_title ?? "Spotifylåt" : question.prompt}</strong><small>{question.content_type === "music" ? question.spotify_artist ?? "Artist saknas" : contentTypeLabel(question.content_type)}</small></span><small className="question-list__prompt">{question.prompt}</small><small className="question-list__place">⌖ {question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I QUIZET ({selectedIds.length})</button>{followupPanel}</div>;
   if (!showMap) return <div className="question-bank">{form}</div>;
   const previewPoint = point ? toPercent(point.longitude, point.latitude) : defaultAnswer;
-  const orderPanel = <div className="quiz-order-panel quiz-order-panel--external"><div className="eyebrow">QUIZORDNING</div><p className="muted">Dra frågor och kategorirubriker i den ordning de ska spelas.</p><div className="quiz-category-form"><input value={categoryTitle} onChange={event => setCategoryTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Ny kategori, t.ex. Bilar" /><button className="button button--secondary" onClick={addCategory}>LÄGG TILL</button></div><div className="quiz-order-list">{orderedItems.length ? orderedItems.map((item, index) => { const question = item.type === "question" ? questions.find(candidate => candidate.id === item.id) : null; if (item.type === "question" && !question) return null; return <div className={`quiz-order-item ${item.type === "category" ? "quiz-order-item--category" : ""} ${draggedId === item.id ? "quiz-order-item--dragging" : ""}`} key={item.id} draggable onDragStart={() => setDraggedId(item.id)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedId) moveQuestion(draggedId, item.id); setDraggedId(null); }} onDragEnd={() => setDraggedId(null)}><span className="quiz-order-handle">⠿</span><strong>{String(index + 1).padStart(2, "0")}</strong>{item.type === "category" ? <><span className="quiz-order-title"><b>▰ {item.title}</b><small>KATEGORI</small></span><button className="quiz-order-remove" onClick={event => { event.stopPropagation(); removeCategory(item.id); }} aria-label={`Ta bort kategorin ${item.title}`}>×</button></> : <span className="quiz-order-title"><b>{question?.content_type === "music" ? question?.spotify_title ?? "Spotifylåt" : question?.prompt}</b><small>{question?.content_type === "music" ? question?.spotify_artist ?? question?.place_label : `${contentTypeLabel(question?.content_type ?? "other")} · ${question?.place_label}`}</small></span>}</div>; }) : <small>Välj frågor i frågebanken eller lägg till en kategori.</small>}</div><button className="button button--primary button--wide" disabled={!orderedSelectedQuestions.length || !spotifyClientId} onClick={() => void createSpotifyPlaylist()}>{spotifyConnected ? "SKAPA SPOTIFY-SPELLISTA" : "KOPPLA SPOTIFY"}</button>{!spotifyClientId && <small className="spotify-config-note">Spotify behöver konfigureras innan spellistan kan skapas.</small>}{playlistStatus && <small className="playlist-status">{playlistStatus}</small>}{playlistUrl && <a className="playlist-link" href={playlistUrl} target="_blank" rel="noreferrer">ÖPPNA SPELLISTAN I SPOTIFY ↗</a>}</div>;
+  const orderPanel = <div className="quiz-order-panel quiz-order-panel--external"><div className="eyebrow">QUIZORDNING</div><p className="muted">Dra geografifrågorna i den ordning de ska spelas. Följdfrågorna följer automatiskt med.</p><div className="quiz-category-form"><input value={categoryTitle} onChange={event => setCategoryTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Ny kategori, t.ex. Bilar" /><button className="button button--secondary" onClick={addCategory}>LÄGG TILL</button></div><div className="quiz-order-list">{orderedItems.length ? orderedItems.map((item, index) => { const question = item.type === "question" ? questions.find(candidate => candidate.id === item.id) : null; const questionFollowups = question ? followups.filter(followup => followup.parent_question_id === question.id).sort((a, b) => a.sort_order - b.sort_order) : []; if (item.type === "question" && !question) return null; return <div className={`quiz-order-item ${item.type === "category" ? "quiz-order-item--category" : ""} ${draggedId === item.id ? "quiz-order-item--dragging" : ""}`} key={item.id} draggable onDragStart={() => setDraggedId(item.id)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedId) moveQuestion(draggedId, item.id); setDraggedId(null); }} onDragEnd={() => setDraggedId(null)}><span className="quiz-order-handle">⠿</span><strong>{String(index + 1).padStart(2, "0")}</strong>{item.type === "category" ? <><span className="quiz-order-title"><b>▰ {item.title}</b><small>KATEGORI</small></span><button className="quiz-order-remove" onClick={event => { event.stopPropagation(); removeCategory(item.id); }} aria-label={`Ta bort kategorin ${item.title}`}>×</button></> : <span className="quiz-order-title"><b>{question?.content_type === "music" ? question?.spotify_title ?? "Spotifylåt" : question?.prompt}</b><small>{question?.content_type === "music" ? question?.spotify_artist ?? question?.place_label : `${contentTypeLabel(question?.content_type ?? "other")} · ${question?.place_label}`}{questionFollowups.length ? ` · ${questionFollowups.length} följdfrågor` : ""}</small></span>}</div>; }) : <small>Välj frågor i frågebanken eller lägg till en kategori.</small>}</div><button className="button button--primary button--wide" disabled={!orderedSelectedQuestions.length || !spotifyClientId} onClick={() => void createSpotifyPlaylist()}>{spotifyConnected ? "SKAPA SPOTIFY-SPELLISTA" : "KOPPLA SPOTIFY"}</button>{!spotifyClientId && <small className="spotify-config-note">Spotify behöver konfigureras innan spellistan kan skapas.</small>}{playlistStatus && <small className="playlist-status">{playlistStatus}</small>}{playlistUrl && <a className="playlist-link" href={playlistUrl} target="_blank" rel="noreferrer">ÖPPNA SPELLISTAN I SPOTIFY ↗</a>}</div>;
   return <><div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div></div></div>{orderPanel}</>;
 }
 
@@ -463,7 +466,7 @@ function MobileFinalView({ players, playerName }: { players: Guess[]; playerName
   return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">QUIZET ÄR KLART</div></header><section className="player-card player-card--finished"><div className="eyebrow">SLUTRESULTAT</div><h1>Prispall</h1>{currentPlayer && <p className="muted player-final-score">{currentPlayer.name}, du fick <strong>{currentPlayer.score ?? 0} poäng</strong>.</p>}<FinalPodium players={sortedPlayers} /></section></main>;
 }
 
-function TvView({ roomCode, round, totalRounds, prompt, category, imageUrl, started, finished, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; category: string; imageUrl: string; started: boolean; finished: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+function TvView({ roomCode, round, totalRounds, prompt, category, imageUrl, followup, started, finished, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; category: string; imageUrl: string; followup: FollowUpQuestion | null; started: boolean; finished: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (started || !qrRef.current || !roomCode) return;
@@ -472,7 +475,9 @@ function TvView({ roomCode, round, totalRounds, prompt, category, imageUrl, star
   const sortedPlayers = [...players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || distanceKm(a, answer) - distanceKm(b, answer));
   if (!started) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">VÄNTAR PÅ START</div></header><section className="tv-lobby"><div className="eyebrow">ANSLUT TILL QUIZET</div><h1>Skanna för att delta</h1><canvas ref={qrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div className="tv-room-code">{roomCode}</div><p>eller skriv in rumskoden på mobilen</p><strong>Spelledaren startar första frågan när alla är redo.</strong></section></main>;
   if (finished) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">QUIZET ÄR KLART</div></header><section className="tv-content tv-content--finished"><div className="eyebrow">SLUTRESULTAT</div><h1>Prispall</h1><FinalPodium players={sortedPlayers} /></section></main>;
-  return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">FRÅGA {String(round).padStart(2, "0")} AV {totalRounds}</div></header><section className="tv-content"><div className="tv-question">{category && <small className="tv-category">{category}</small>}{prompt}{imageUrl && <img className="question-image question-image--tv" src={imageUrl} alt="Bild till frågan" />}</div><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 1} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><small className={player.locked ? "player-ready" : "player-waiting"}>{player.locked ? "KLAR" : "VÄNTAR"}</small><b>{player.score ?? 0} p</b></div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
+  const displayedPrompt = followup?.prompt ?? prompt;
+  const displayedImage = followup?.image_url ?? imageUrl;
+  return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">FRÅGA {String(round).padStart(2, "0")} AV {totalRounds}</div></header><section className="tv-content"><div className="tv-question">{followup ? <small className="tv-category">FÖLJDFRÅGA · {followup.points} P</small> : category && <small className="tv-category">{category}</small>}{displayedPrompt}{displayedImage && <img className="question-image question-image--tv" src={displayedImage} alt="Bild till frågan" />}</div><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 1} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><small className={(followup ? player.followupLocked : player.locked) ? "player-ready" : "player-waiting"}>{(followup ? player.followupLocked : player.locked) ? "KLAR" : "VÄNTAR"}</small><b>{player.score ?? 0} p</b></div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
 }
 
 export default function Home() {
@@ -481,7 +486,8 @@ export default function Home() {
   const [round, setRound] = useState(1);
   const [started, setStarted] = useState(false);
   const [quizFinished, setQuizFinished] = useState(false);
-  const [picked, setPicked] = useState({ x: 45, y: 46 });
+    const [picked, setPicked] = useState({ x: 45, y: 46 });
+    const [followupAnswer, setFollowupAnswer] = useState("");
   const [locked, setLocked] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [joined, setJoined] = useState(false);
@@ -492,12 +498,19 @@ export default function Home() {
   const [connectionStatus, setConnectionStatus] = useState("ANSLUTER");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+    const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+    const [followups, setFollowups] = useState<FollowUpQuestion[]>([]);
     const [questionPrompt, setQuestionPrompt] = useState("");
     const [questionPlaceQuery, setQuestionPlaceQuery] = useState("");
     const [questionPoint, setQuestionPoint] = useState<{ latitude: number; longitude: number } | null>(null);
     const [questionContentType, setQuestionContentType] = useState<QuizQuestion["content_type"]>("music");
     const [questionImageUrl, setQuestionImageUrl] = useState("");
+    const [followupParentId, setFollowupParentId] = useState("");
+    const [followupPrompt, setFollowupPrompt] = useState("");
+    const [followupImageUrl, setFollowupImageUrl] = useState("");
+    const [followupSpotifyUrl, setFollowupSpotifyUrl] = useState("");
+    const [followupPoints, setFollowupPoints] = useState("1");
+    const [followupStatus, setFollowupStatus] = useState("");
     const [questionSpotifyUrl, setQuestionSpotifyUrl] = useState("");
   const [spotifyPreview, setSpotifyPreview] = useState<{ title: string; artist: string } | null>(null);
   const [questionStatus, setQuestionStatus] = useState("");
@@ -506,9 +519,11 @@ export default function Home() {
   const [activeQuestions, setActiveQuestions] = useState<QuizQuestion[]>([]);
   const [activeQuizOrder, setActiveQuizOrder] = useState<QuizOrderItem[]>([]);
     const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+    const [activeFollowupIndex, setActiveFollowupIndex] = useState(-1);
     const [broadcastPrompt, setBroadcastPrompt] = useState("Var i världen?");
     const [broadcastCategory, setBroadcastCategory] = useState("");
     const [broadcastImageUrl, setBroadcastImageUrl] = useState("");
+    const [broadcastFollowup, setBroadcastFollowup] = useState<FollowUpQuestion | null>(null);
   const [broadcastTotalRounds, setBroadcastTotalRounds] = useState(1);
   const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -530,6 +545,11 @@ export default function Home() {
   const pickedLngLat = toLngLat(picked);
     const activePrompt = activeQuestions[activeQuestionIndex]?.prompt ?? "Var i världen?";
     const activeImageUrl = activeQuestions[activeQuestionIndex]?.image_url ?? "";
+    const activeFollowups = useMemo(() => {
+      const parentId = activeQuestions[activeQuestionIndex]?.id;
+      return followups.filter(followup => followup.parent_question_id === parentId).sort((a, b) => a.sort_order - b.sort_order);
+    }, [activeQuestions, activeQuestionIndex, followups]);
+    const currentFollowup = activeFollowupIndex >= 0 ? activeFollowups[activeFollowupIndex] ?? null : null;
   const activeCategory = useMemo(() => {
     let category = "";
     let questionIndex = -1;
@@ -540,13 +560,14 @@ export default function Home() {
     return "";
   }, [activeQuizOrder, activeQuestionIndex]);
   const roundTotal = Math.max(activeQuestions.length, 1);
-    const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl });
+    const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl, followup: currentFollowup });
 
   useEffect(() => {
     if (mode !== "player") return;
     setLocked(false);
+    setFollowupAnswer("");
     setPicked({ x: 45, y: 46 });
-  }, [mode, round]);
+  }, [mode, round, broadcastFollowup?.id]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -595,6 +616,13 @@ export default function Home() {
       }
     });
   }, [mode, user, activeQuestions.length]);
+
+  useEffect(() => {
+    if (!['host', 'admin'].includes(mode) || !user) return;
+    void supabase.from("quiz_followups").select("id,owner_id,parent_question_id,prompt,answer_type,image_url,spotify_url,spotify_title,spotify_artist,points,sort_order").order("sort_order", { ascending: true }).then(({ data }) => {
+      if (data) setFollowups(data as FollowUpQuestion[]);
+    });
+  }, [mode, user]);
 
   useEffect(() => {
     if (mode !== "admin" || !questions.length) return;
@@ -695,8 +723,8 @@ export default function Home() {
   }, [scanOpen, roomCode]);
 
   useEffect(() => {
-    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl };
-  }, [roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory, activeImageUrl]);
+    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl, followup: currentFollowup };
+  }, [roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory, activeImageUrl, currentFollowup]);
 
   useEffect(() => {
     const channel = supabase
@@ -717,6 +745,7 @@ export default function Home() {
         if (typeof payload.prompt === "string") setBroadcastPrompt(payload.prompt);
         if (typeof payload.category === "string") setBroadcastCategory(payload.category);
         if (typeof payload.imageUrl === "string") setBroadcastImageUrl(payload.imageUrl);
+        setBroadcastFollowup(payload.followup && typeof payload.followup.prompt === "string" ? payload.followup as FollowUpQuestion : null);
         if (payload.answer && typeof payload.answer.x === "number" && typeof payload.answer.y === "number") setAnswer(payload.answer as { x: number; y: number });
       })
       .on("broadcast", { event: "active_questions" }, ({ payload }) => {
@@ -757,8 +786,8 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "host" || !channelRef.current) return;
-    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl, source: "host" } });
-  }, [mode, roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory, activeImageUrl]);
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, imageUrl: activeImageUrl, followup: currentFollowup, source: "host" } });
+  }, [mode, roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory, activeImageUrl, currentFollowup]);
 
   const findAnswerPlace = async () => {
     const query = answerQuery.trim();
@@ -815,13 +844,27 @@ export default function Home() {
     setQuestionPrompt(""); setQuestionPlaceQuery(""); setQuestionPoint(null); setQuestionContentType("music"); setQuestionImageUrl(""); setQuestionSpotifyUrl(""); setSpotifyPreview(null); setQuestionStatus("FRÅGAN SPARAD");
   };
 
+  const saveFollowup = async () => {
+    if (!followupParentId || !followupPrompt.trim()) return;
+    setFollowupStatus("SPARAR...");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUser = sessionData.session?.user;
+    if (!currentUser) { setFollowupStatus("KUNDE INTE SPARA: LOGGA IN IGEN"); return; }
+    const spotifyTrackId = followupSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/)?.[1] ?? null;
+    const sortOrder = followups.filter(followup => followup.parent_question_id === followupParentId).length;
+    const { data, error } = await supabase.from("quiz_followups").insert({ owner_id: currentUser.id, parent_question_id: followupParentId, prompt: followupPrompt.trim(), image_url: followupImageUrl.trim() || null, spotify_url: followupSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, points: Math.max(0, Math.min(10, Number(followupPoints) || 1)), sort_order: sortOrder }).select("id,owner_id,parent_question_id,prompt,answer_type,image_url,spotify_url,spotify_title,spotify_artist,points,sort_order").single();
+    if (error) { setFollowupStatus(`KUNDE INTE SPARA: ${error.message}`); return; }
+    if (data) setFollowups(current => [...current, data as FollowUpQuestion]);
+    setFollowupPrompt(""); setFollowupImageUrl(""); setFollowupSpotifyUrl(""); setFollowupPoints("1"); setFollowupStatus("FÖLJDFRÅGAN SPARAD");
+  };
+
   const useSelectedQuestions = () => {
     const chosen = quizOrderItems.filter((item): item is Extract<QuizOrderItem, { type: "question" }> => item.type === "question").map(item => questions.find(question => question.id === item.id)).filter((question): question is QuizQuestion => Boolean(question));
     if (!chosen.length) return;
     window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(chosen));
     window.localStorage.setItem(activeQuizOrderStorageKey, JSON.stringify(quizOrderItems));
     void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: chosen, items: quizOrderItems } });
-    setActiveQuestions(chosen); setActiveQuizOrder(quizOrderItems); setActiveQuestionIndex(0); setRound(1); setReveal(0); setQuizFinished(false); setPlayers([]); setLocked(false);
+    setActiveQuestions(chosen); setActiveQuizOrder(quizOrderItems); setActiveQuestionIndex(0); setActiveFollowupIndex(-1); setRound(1); setReveal(0); setQuizFinished(false); setPlayers([]); setLocked(false);
     const first = chosen[0]; setAnswer(toPercent(first.longitude, first.latitude)); setAnswerLabel(first.place_label); setAnswerQuery(first.place_label);
   };
 
@@ -841,6 +884,14 @@ export default function Home() {
   const lockGuess = () => {
     const player = players.find(candidate => candidate.name === playerName);
     if (!player) return;
+    if (mode === "player" && broadcastFollowup) {
+      if (!followupAnswer.trim()) return;
+      const updatedPlayer = { ...player, followupAnswer: followupAnswer.trim(), followupLocked: true };
+      setPlayers(current => upsertPlayer(current, updatedPlayer));
+      void channelRef.current?.send({ type: "broadcast", event: "guess_submitted", payload: { player: updatedPlayer, sessionId } });
+      setLocked(true);
+      return;
+    }
     const updatedPlayer = { ...player, x: picked.x, y: picked.y, locked: true };
     setPlayers(current => upsertPlayer(current, updatedPlayer));
     void channelRef.current?.send({ type: "broadcast", event: "guess_submitted", payload: { player: updatedPlayer, sessionId } });
@@ -852,12 +903,26 @@ export default function Home() {
     const nextIndex = activeQuestionIndex + 1;
     const nextQuestion = activeQuestions[nextIndex];
     if (!nextQuestion) { setQuizFinished(true); return; }
-    setActiveQuestionIndex(nextIndex); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label);
+    setActiveQuestionIndex(nextIndex); setActiveFollowupIndex(-1); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label);
     setRound(current => current + 1);
     setReveal(0);
     setLocked(false);
     scoredRoundRef.current = null;
-    setPlayers(current => current.map(player => ({ ...player, x: 45, y: 46, locked: false })));
+    setPlayers(current => current.map(player => ({ ...player, x: 45, y: 46, locked: false, followupAnswer: "", followupLocked: false, followupAwarded: false })));
+  };
+
+  const nextQuizStep = () => {
+    if (activeFollowupIndex >= 0 && activeFollowupIndex + 1 < activeFollowups.length) {
+      setActiveFollowupIndex(index => index + 1);
+      setPlayers(current => current.map(player => ({ ...player, followupAnswer: "", followupLocked: false, followupAwarded: false })));
+      return;
+    }
+    if (activeFollowupIndex >= 0) setActiveFollowupIndex(-1);
+    nextRound();
+  };
+
+  const awardFollowupPoints = (playerNameToAward: string, points: number) => {
+    setPlayers(current => current.map(player => player.name === playerNameToAward ? { ...player, score: (player.score ?? 0) + points, followupAwarded: true } : player));
   };
 
   const showDistanceAndAwardPoints = () => {
@@ -871,19 +936,20 @@ export default function Home() {
         return { ...player, score: (player.score ?? 0) + pointsForRank(current.length, rank) };
       });
     });
-    if (round >= roundTotal) setQuizFinished(true);
+    if (activeFollowups.length) setActiveFollowupIndex(0);
+    else if (round >= roundTotal) setQuizFinished(true);
   };
 
-  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, contentType: questionContentType, setContentType: setQuestionContentType, imageUrl: questionImageUrl, setImageUrl: setQuestionImageUrl, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, orderItems: quizOrderItems, setOrderItems: setQuizOrderItems, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
+  const bankProps: QuestionBankPanelProps = { questions, followups, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, contentType: questionContentType, setContentType: setQuestionContentType, imageUrl: questionImageUrl, setImageUrl: setQuestionImageUrl, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, followupParentId, setFollowupParentId, followupPrompt, setFollowupPrompt, followupImageUrl, setFollowupImageUrl, followupSpotifyUrl, setFollowupSpotifyUrl, followupPoints, setFollowupPoints, followupStatus, saveFollowup: () => void saveFollowup(), point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, orderItems: quizOrderItems, setOrderItems: setQuizOrderItems, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
 
   if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
   if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>{ window.localStorage.removeItem(spotifyTokenStorageKey); window.sessionStorage.removeItem(spotifyTokenStorageKey); void supabase.auth.signOut(); }} />;
-  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} imageUrl={broadcastImageUrl} started={started} finished={quizFinished} reveal={reveal} players={players} answer={answer} />;
+  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} imageUrl={broadcastImageUrl} followup={broadcastFollowup} started={started} finished={quizFinished} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player" && joined && quizFinished) return <MobileFinalView players={scoreSorted} playerName={playerName} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
-    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">FRÅGA {String(round).padStart(2, "0")} AV {broadcastTotalRounds}</span></div>{broadcastCategory && <div className="player-category">{broadcastCategory}</div>}<h2>{broadcastPrompt}</h2>{broadcastImageUrl && <img className="question-image question-image--player" src={broadcastImageUrl} alt="Bild till frågan" />}<p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={[]} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "QUIZET ÄR LÅST" : "LÅS SVAR"}</button></div></>}
+    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">FRÅGA {String(round).padStart(2, "0")} AV {broadcastTotalRounds}</span></div>{broadcastFollowup ? <><div className="player-category">FÖLJDFRÅGA · {broadcastFollowup.points} P</div><h2>{broadcastFollowup.prompt}</h2>{broadcastFollowup.image_url && <img className="question-image question-image--player" src={broadcastFollowup.image_url} alt="Bild till följdfrågan" />}<p className="muted">Skriv ditt svar och lås in det.</p><input value={followupAnswer} onChange={event => setFollowupAnswer(event.target.value)} placeholder="Ditt svar" disabled={locked} /><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || !followupAnswer.trim()} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : "LÅS SVAR"}</button></> : <>{broadcastCategory && <div className="player-category">{broadcastCategory}</div>}<h2>{broadcastPrompt}</h2>{broadcastImageUrl && <img className="question-image question-image--player" src={broadcastImageUrl} alt="Bild till frågan" />}<p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={[]} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "QUIZET ÄR LÅST" : "LÅS SVAR"}</button></div></>}</>}
   </section></main>;
 
-  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><em className={p.locked ? "player-ready" : "player-waiting"}>{p.locked ? "KLAR" : "VÄNTAR"}</em><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>{ setStarted(true); setQuizFinished(false); }} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div>{activeCategory && <div className="host-category">{activeCategory}</div>}<h2>{activePrompt}</h2>{activeImageUrl && <img className="question-image question-image--host" src={activeImageUrl} alt="Bild till frågan" />}</div><div className="phase"><span className="phase-dot"/> {quizFinished ? "QUIZET ÄR KLART" : started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/><div className="reveal-controls"><button className="button button--outline" disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || quizFinished || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">{quizFinished ? "SLUTRESULTAT" : "FRÅGERESULTAT"}</div><h3>{quizFinished ? "Prispall" : "Närmast rätt plats"}</h3></div>{!quizFinished && <button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button>}</div>{quizFinished ? <FinalPodium players={scoreSorted} /> : <div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div>}</div>}</section></div></main>;
+  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><em className={p.locked ? "player-ready" : "player-waiting"}>{p.locked ? "KLAR" : "VÄNTAR"}</em><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>{ setStarted(true); setQuizFinished(false); }} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div>{currentFollowup ? <div className="host-category">FÖLJDFRÅGA · {currentFollowup.points} P</div> : activeCategory && <div className="host-category">{activeCategory}</div>}<h2>{currentFollowup?.prompt ?? activePrompt}</h2>{(currentFollowup?.image_url ?? activeImageUrl) && <img className="question-image question-image--host" src={currentFollowup?.image_url ?? activeImageUrl} alt="Bild till frågan" />}</div><div className="phase"><span className="phase-dot"/> {quizFinished ? "QUIZET ÄR KLART" : currentFollowup ? "FÖLJDFRÅGA" : started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/>{currentFollowup && <div className="followup-host-panel"><div className="eyebrow">MANUELL POÄNGSÄTTNING</div><p className="muted">Spelarnas svar visas här. Dela ut poäng manuellt.</p>{players.length ? players.map(player => <div className="followup-score-row" key={player.name}><span><b>{player.name}</b><small>{player.followupAnswer || "Väntar på svar…"}</small></span><div>{[0, 1, 2, 3, 5].map(points => <button key={points} className={player.followupAwarded && points === 0 ? "button button--done" : "button button--outline"} disabled={player.followupAwarded} onClick={() => awardFollowupPoints(player.name, points)}>+{points}</button>)}</div></div>) : <p className="muted">Inga spelare anslutna.</p>}<button className="button button--primary" onClick={nextQuizStep}>NÄSTA STEG →</button></div>}{!currentFollowup && <div className="reveal-controls"><button className="button button--outline" disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || quizFinished || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>}{reveal >= 3 && !currentFollowup && <div className="results"><div className="results-head"><div><div className="eyebrow">{quizFinished ? "SLUTRESULTAT" : "FRÅGERESULTAT"}</div><h3>{quizFinished ? "Prispall" : "Närmast rätt plats"}</h3></div>{!quizFinished && <button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button>}</div>{quizFinished ? <FinalPodium players={scoreSorted} /> : <div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div>}</div>}</section></div></main>;
 }
