@@ -186,6 +186,16 @@ export default function Home() {
   const roomStateRef = useRef({ round, reveal, players });
 
   useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const scannedRoom = new URLSearchParams(window.location.search).get("room");
+      if (!scannedRoom) return;
+      setRoomCodeInput(scannedRoom);
+      setMode("player");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     if (mode !== "host" || !hostQrRef.current) return;
     let active = true;
     void import("qrcode").then(QRCode => {
