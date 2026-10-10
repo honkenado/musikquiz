@@ -127,10 +127,26 @@
 .admin-content .question-bank input { padding: 12px; }
 .question-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr); gap: 24px; align-items: start; }
 .question-editor-form { min-width: 0; }
+.question-editor-map-area { display: grid; grid-template-columns: minmax(0, 1fr) minmax(235px, .9fr); gap: 16px; align-items: start; min-width: 0; }
 .question-editor-map { min-width: 0; padding: 16px; border: 1px solid #64d7ff33; border-radius: 10px; background: #64d7ff08; }
 .question-editor-map .muted { margin: 8px 0 12px; font-size: 12px; }
 .question-editor-map .map-shell { aspect-ratio: 1.35; min-height: 320px; }
 .question-editor-map .map-pin--answer span { display: block; }
+.quiz-order-panel { min-width: 0; padding: 16px; border: 1px solid #d9ff7833; border-radius: 10px; background: #d9ff7808; }
+.quiz-order-panel .muted { margin: 8px 0 12px; font-size: 12px; line-height: 1.45; }
+.quiz-order-list { display: grid; gap: 7px; max-height: 320px; overflow: auto; margin-bottom: 10px; }
+.quiz-order-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 9px 8px; border: 1px solid #ffffff12; border-radius: 7px; background: #0d1c22; cursor: grab; }
+.quiz-order-item:active { cursor: grabbing; }
+.quiz-order-item--dragging { opacity: .45; border-color: var(--lime); }
+.quiz-order-handle { color: var(--lime); font-size: 18px; line-height: 1; }
+.quiz-order-item > strong { color: var(--muted); font: 10px 'DM Mono', monospace; }
+.quiz-order-title { min-width: 0; }
+.quiz-order-title b, .quiz-order-title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quiz-order-title small { margin-top: 3px; color: var(--muted); font: 10px 'DM Mono', monospace; }
+.quiz-order-panel .button { margin-top: 4px; }
+.spotify-config-note, .playlist-status { display: block; margin-top: 8px; color: var(--muted) !important; line-height: 1.45; }
+.playlist-status { color: var(--lime) !important; }
+.playlist-link { display: block; margin-top: 10px; color: var(--lime); font: 11px 'DM Mono', monospace; text-decoration: none; }
 
 .map-water-overlay { fill: #347b96; opacity: .92; }
 .map-land-overlay path { fill: #e6e6c4; opacity: .88; }
@@ -215,5 +231,6 @@
 
 @media (max-width: 800px) {
   .question-editor-layout { grid-template-columns: 1fr; }
+  .question-editor-map-area { grid-template-columns: 1fr; }
   .question-editor-map .map-shell { min-height: 260px; }
 }

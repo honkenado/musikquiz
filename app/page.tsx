@@ -22,6 +22,8 @@ const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
 const normalizeRoomCode = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 const activeQuestionsStorageKey = "musikquiz-active-questions";
+const spotifyClientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? "";
+const spotifyTokenStorageKey = "musikquiz-spotify-token";
 const generateRoomCode = () => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   return Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
@@ -60,6 +62,12 @@ const pointsForRank = (playerCount: number, rank: number) => {
   if (playerCount >= 4) return rank === 0 ? 3 : rank === 1 ? 2 : rank === 2 ? 1 : 0;
   return 0;
 };
+const spotifyTrackIdFromUrl = (url: string) => url.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/)?.[1] ?? null;
+const spotifyTrackUri = (url: string) => {
+  const id = spotifyTrackIdFromUrl(url);
+  return id ? `spotify:track:${id}` : null;
+};
+const toBase64Url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 function Map({ reveal, guesses, answer, onPick, selected, compact = false, showAnswer = false }: { reveal: number; guesses: Guess[]; answer: { x: number; y: number }; onPick?: (x: number, y: number) => void; selected?: { x: number; y: number }; compact?: boolean; showAnswer?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -225,11 +233,94 @@ function OverlayMarker({ mapRef, point, className, label, color }: { mapRef: Map
 
 function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spotifyUrl, setSpotifyUrl, point, setPoint, preview, status, selectedIds, setSelectedIds, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
   const allSelected = questions.length > 0 && selectedIds.length === questions.length;
+  const orderedSelectedQuestions = selectedIds.map(id => questions.find(question => question.id === id)).filter((question): question is QuizQuestion => Boolean(question));
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [playlistStatus, setPlaylistStatus] = useState("");
+  const [playlistUrl, setPlaylistUrl] = useState("");
   const toggleAll = () => setSelectedIds(allSelected ? [] : questions.map(question => question.id));
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(spotifyTokenStorageKey);
+    setSpotifyConnected(Boolean(stored));
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const returnedState = params.get("state");
+    if (!code) return;
+    if (!returnedState || returnedState !== window.sessionStorage.getItem("musikquiz-spotify-state")) {
+      setPlaylistStatus("Spotify-inloggningen kunde inte verifieras.");
+      return;
+    }
+    const verifier = window.sessionStorage.getItem("musikquiz-spotify-verifier");
+    if (!verifier || !spotifyClientId) return;
+    void fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: spotifyClientId, grant_type: "authorization_code", code, redirect_uri: window.location.href.split("?")[0], code_verifier: verifier }),
+    }).then(async response => {
+      const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+      if (!response.ok || !data.access_token) throw new Error("Spotify kunde inte godkänna anslutningen.");
+      window.sessionStorage.setItem(spotifyTokenStorageKey, JSON.stringify({ accessToken: data.access_token, refreshToken: data.refresh_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }));
+      setSpotifyConnected(true);
+      setPlaylistStatus("Spotify är anslutet. Klicka på knappen igen för att skapa spellistan.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }).catch(error => setPlaylistStatus(error instanceof Error ? error.message : "Spotify-inloggningen misslyckades."));
+  }, []);
+
+  const connectSpotify = async () => {
+    if (!spotifyClientId) { setPlaylistStatus("Spotify behöver konfigureras med ett Spotify Client ID först."); return; }
+    const verifierBytes = crypto.getRandomValues(new Uint8Array(64));
+    const verifier = toBase64Url(verifierBytes);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    const challenge = toBase64Url(new Uint8Array(digest));
+    const state = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
+    const redirectUri = window.location.href.split("?")[0];
+    window.sessionStorage.setItem("musikquiz-spotify-verifier", verifier);
+    window.sessionStorage.setItem("musikquiz-spotify-state", state);
+    const params = new URLSearchParams({ response_type: "code", client_id: spotifyClientId, scope: "playlist-modify-private", redirect_uri: redirectUri, state, code_challenge_method: "S256", code_challenge: challenge });
+    window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
+  };
+
+  const getSpotifyAccessToken = async () => {
+    const stored = window.sessionStorage.getItem(spotifyTokenStorageKey);
+    if (!stored) return null;
+    const token = JSON.parse(stored) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
+    if (token.accessToken && (token.expiresAt ?? 0) > Date.now() + 60_000) return token.accessToken;
+    if (!token.refreshToken || !spotifyClientId) return null;
+    const response = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: spotifyClientId, grant_type: "refresh_token", refresh_token: token.refreshToken }) });
+    const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+    if (!response.ok || !data.access_token) return null;
+    window.sessionStorage.setItem(spotifyTokenStorageKey, JSON.stringify({ accessToken: data.access_token, refreshToken: data.refresh_token ?? token.refreshToken, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }));
+    return data.access_token;
+  };
+
+  const createSpotifyPlaylist = async () => {
+    if (!orderedSelectedQuestions.length) return;
+    if (!spotifyConnected) { await connectSpotify(); return; }
+    const uris = orderedSelectedQuestions.map(question => spotifyTrackUri(question.spotify_url)).filter((uri): uri is string => Boolean(uri));
+    if (!uris.length) { setPlaylistStatus("De valda frågorna saknar giltiga Spotifylåtar."); return; }
+    setPlaylistStatus("SKAPAR SPELLISTA...");
+    try {
+      const accessToken = await getSpotifyAccessToken();
+      if (!accessToken) { setSpotifyConnected(false); setPlaylistStatus("Spotifyanslutningen har gått ut. Klicka för att ansluta igen."); return; }
+      const headers = { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" };
+      const playlistResponse = await fetch("https://api.spotify.com/v1/me/playlists", { method: "POST", headers, body: JSON.stringify({ name: `Världens toner – ${new Date().toLocaleDateString("sv-SE")}`, public: false, collaborative: false, description: "Skapad från Världens toner" }) });
+      const playlist = await playlistResponse.json() as { id?: string; external_urls?: { spotify?: string }; error?: { message?: string } };
+      if (!playlistResponse.ok || !playlist.id) throw new Error(playlist.error?.message ?? "Kunde inte skapa spellistan.");
+      const tracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/items`, { method: "POST", headers, body: JSON.stringify({ uris }) });
+      if (!tracksResponse.ok) { const error = await tracksResponse.json() as { error?: { message?: string } }; throw new Error(error.error?.message ?? "Kunde inte lägga till låtarna."); }
+      setPlaylistUrl(playlist.external_urls?.spotify ?? `https://open.spotify.com/playlist/${playlist.id}`);
+      setPlaylistStatus(`${uris.length} låtar lades till i Spotify.`);
+    } catch (error) { setPlaylistStatus(error instanceof Error ? error.message : "Kunde inte skapa Spotify-spellistan."); }
+  };
+
+  const moveQuestion = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setSelectedIds(current => { const next = [...current]; const sourceIndex = next.indexOf(sourceId); const targetIndex = next.indexOf(targetId); if (sourceIndex < 0 || targetIndex < 0) return current; next.splice(sourceIndex, 1); next.splice(targetIndex, 0, sourceId); return next; });
+  };
   const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list__toolbar"><span>{questions.length} frågor · {selectedIds.length} valda</span><button className="button button--outline" disabled={!questions.length} onClick={toggleAll}>{allSelected ? "AVMARKERA ALLA" : "VÄLJ ALLA"}</button></div><div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>setSelectedIds(current=>event.target.checked ? [...current, question.id] : current.filter(id => id !== question.id))} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I QUIZET ({selectedIds.length})</button></div>;
   if (!showMap) return <div className="question-bank">{form}</div>;
   const previewPoint = point ? toPercent(point.longitude, point.latitude) : defaultAnswer;
-  return <div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div></div></div>;
+  return <div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map-area"><div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div><div className="quiz-order-panel"><div className="eyebrow">QUIZORDNING</div><p className="muted">Dra låtarna i den ordning de ska spelas.</p><div className="quiz-order-list">{orderedSelectedQuestions.length ? orderedSelectedQuestions.map((question, index) => <div className={`quiz-order-item ${draggedId === question.id ? "quiz-order-item--dragging" : ""}`} key={question.id} draggable onDragStart={() => setDraggedId(question.id)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedId) moveQuestion(draggedId, question.id); setDraggedId(null); }} onDragEnd={() => setDraggedId(null)}><span className="quiz-order-handle">⠿</span><strong>{String(index + 1).padStart(2, "0")}</strong><span className="quiz-order-title"><b>{question.spotify_title ?? "Spotifylåt"}</b><small>{question.spotify_artist ?? question.place_label}</small></span></div>) : <small>Välj låtar i frågebanken för att bygga quizordningen.</small>}</div><button className="button button--primary button--wide" disabled={!orderedSelectedQuestions.length || !spotifyClientId} onClick={() => void createSpotifyPlaylist()}>{spotifyConnected ? "SKAPA SPOTIFY-SPELLISTA" : "KOPPLA SPOTIFY"}</button>{!spotifyClientId && <small className="spotify-config-note">Spotify behöver konfigureras innan spellistan kan skapas.</small>}{playlistStatus && <small className="playlist-status">{playlistStatus}</small>}{playlistUrl && <a className="playlist-link" href={playlistUrl} target="_blank" rel="noreferrer">ÖPPNA SPELLISTAN I SPOTIFY ↗</a>}</div></div></div></div>;
 }
 
 function HostSessionPanel({ started, onStart }: { started: boolean; onStart: () => void }) {
@@ -385,7 +476,7 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "admin" || !questions.length) return;
-    const selected = questions.filter(question => selectedQuestionIds.includes(question.id));
+    const selected = selectedQuestionIds.map(id => questions.find(question => question.id === id)).filter((question): question is QuizQuestion => Boolean(question));
     if (selected.length) window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(selected));
     else window.localStorage.removeItem(activeQuestionsStorageKey);
     void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: selected } });
