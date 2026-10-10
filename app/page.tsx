@@ -70,9 +70,11 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         }
         return (coordinates as unknown[]).map(item => pathFor(item, close)).join(" ");
       };
-      const paths = (countryBorders.features as Array<{ geometry: { type: string; coordinates: unknown } }>).map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean);
+      const countryFeatures = Array.isArray((countryBorders as { features?: unknown[] }).features) ? (countryBorders as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const stateFeatures = Array.isArray((usStates as { features?: unknown[] }).features) ? (usStates as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const paths = countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean);
       const statePaths = map.getZoom() >= 2.8
-        ? (usStates.features as Array<{ geometry: { type: string; coordinates: unknown } }>).map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
+        ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
         : [];
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
       svg.innerHTML = `<g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
