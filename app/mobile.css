@@ -107,3 +107,21 @@
 .map-borders-overlay[data-state-detail="true"] .map-border-lines--state path { stroke-width: .78px; opacity: .68; }
 
 .button--locked { background: #17332f; color: #77d6ae; cursor: default; }
+
+.button--secondary { background: #17332f; color: #b7e8d3; border: 1px solid #315c52; }
+.room-qr { margin-top: 22px; padding: 12px; display: flex; align-items: center; gap: 11px; border: 1px solid #d9ff7833; border-radius: 10px; background: #d9ff7808; }
+.room-qr canvas { width: 86px; height: 86px; border-radius: 4px; image-rendering: pixelated; flex: 0 0 auto; }
+.room-qr strong { display: block; color: var(--lime); font: 10px 'DM Mono', monospace; letter-spacing: .04em; line-height: 1.35; }
+.room-qr small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.scan-modal { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; padding: 18px; background: #030a0dcc; backdrop-filter: blur(7px); }
+.scan-modal__card { width: min(100%, 430px); padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #0e1d25; box-shadow: 0 24px 80px #0009; }
+.scan-modal__card h2 { margin: 10px 0 16px; font-size: 22px; letter-spacing: -.04em; }
+.scan-modal video { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #020708; }
+.scan-modal__actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.scan-error { color: #ff9b87; margin-top: 12px; font-size: 13px; }
+.player-card .button--secondary { margin-bottom: 10px; }
+.player-card .button--secondary + input { margin-top: 0; }
+
+@media (min-width: 801px) {
+  .room-qr { margin-top: 22px; }
+}

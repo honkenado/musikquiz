@@ -8,12 +8,14 @@ import countryBorders from "./data/country-borders.json";
 import admin1Lines from "./data/admin1-lines.json";
 import countries from "./data/countries.json";
 import lakes from "./data/lakes.json";
+import type QrScanner from "qr-scanner";
 
 type Guess = { name: string; color: string; x: number; y: number };
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#ff9ee8", "#8fb8ff", "#ffb86b"];
 const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
+const normalizeRoomCode = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 
 const upsertPlayer = (current: Guess[], incoming: Guess) => {
   const existingIndex = current.findIndex(player => player.name.toLowerCase() === incoming.name.toLowerCase());
@@ -161,21 +163,73 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
 }
 
 export default function Home() {
-  const [mode, setMode] = useState<"host" | "player">("host");
+  const [mode, setMode] = useState<"host" | "player">(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : "host");
   const [reveal, setReveal] = useState(0);
   const [round, setRound] = useState(4);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
   const [locked, setLocked] = useState(false);
   const [playerName, setPlayerName] = useState("");
   const [joined, setJoined] = useState(false);
+  const [roomCodeInput, setRoomCodeInput] = useState(() => typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("room") ?? "");
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanError, setScanError] = useState("");
   const [players, setPlayers] = useState<Guess[]>(initialPlayers);
   const [connectionStatus, setConnectionStatus] = useState("ANSLUTER");
   const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const hostQrRef = useRef<HTMLCanvasElement>(null);
+  const scanVideoRef = useRef<HTMLVideoElement>(null);
+  const qrScannerRef = useRef<QrScanner | null>(null);
   const roomCode = "NORD 7K";
   const ready = players.length;
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players]);
   const roomStateRef = useRef({ round, reveal, players });
+
+  useEffect(() => {
+    if (mode !== "host" || !hostQrRef.current) return;
+    let active = true;
+    void import("qrcode").then(QRCode => {
+      if (!active || !hostQrRef.current) return;
+      void QRCode.toCanvas(hostQrRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, {
+        width: 156,
+        margin: 1,
+        color: { dark: "#081218", light: "#e6e6c4" },
+      });
+    });
+    return () => { active = false; };
+  }, [mode, roomCode]);
+
+  useEffect(() => {
+    if (!scanOpen || !scanVideoRef.current) return;
+    let cancelled = false;
+    let scanner: QrScanner | null = null;
+    setScanError("");
+    void import("qr-scanner").then(({ default: QrScanner }) => {
+      if (cancelled || !scanVideoRef.current) return;
+      scanner = new QrScanner(scanVideoRef.current, result => {
+        const scannedValue = result.data;
+        let scannedRoom = scannedValue;
+        try {
+          scannedRoom = new URL(scannedValue, window.location.href).searchParams.get("room") ?? scannedValue;
+        } catch {
+          // A plain room code is also accepted.
+        }
+        if (normalizeRoomCode(scannedRoom) !== normalizeRoomCode(roomCode)) {
+          setScanError("QR-koden hör till ett annat rum.");
+          return;
+        }
+        setRoomCodeInput(roomCode);
+        setScanOpen(false);
+      }, { highlightScanRegion: true, highlightCodeOutline: true, returnDetailedScanResult: true });
+      qrScannerRef.current = scanner;
+      void scanner.start().catch(() => setScanError("Kameran kunde inte starta. Kontrollera kamerabehörigheten."));
+    });
+    return () => {
+      cancelled = true;
+      scanner?.destroy();
+      qrScannerRef.current = null;
+    };
+  }, [scanOpen, roomCode]);
 
   useEffect(() => {
     roomStateRef.current = { round, reveal, players };
@@ -223,7 +277,7 @@ export default function Home() {
 
   const joinRoom = () => {
     const baseName = playerName.trim().slice(0, 24);
-    if (!baseName || connectionStatus === "OFFLINE") return;
+    if (!baseName || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode) || connectionStatus === "OFFLINE") return;
     let uniqueName = baseName;
     let suffix = 2;
     while (players.some(player => player.name.toLowerCase() === uniqueName.toLowerCase())) uniqueName = `${baseName} ${suffix++}`;
@@ -251,8 +305,8 @@ export default function Home() {
   };
 
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
-    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skriv ditt namn för att ansluta till quizet.</p><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" autoFocus /><button className="button button--primary button--wide" disabled={!playerName.trim()} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKOD <strong>{roomCode}</strong></div></> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(90 - picked.y * 1.8)}°N, {Math.round(picked.x * 3.6 - 180)}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
+    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(90 - picked.y * 1.8)}°N, {Math.round(picked.x * 3.6 - 180)}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
 
-  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><h1>AW<br/><em>Geografisk</em><br/>edition</h1><div className="round-card"><span>AKTIV OMGÅNG</span><strong>{String(round).padStart(2,"0")}</strong><small>av 10</small></div><div className="progress"><span style={{width:`${Math.min(round*10, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>KLAR</b></div>)}</div><div className="host-tip"><span>♫</span><div><strong>Spela musiken</strong><small>Frågan ställs utanför appen.</small></div></div></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · OMGÅNG {String(round).padStart(2,"0")}</div><h2>Var i världen?</h2></div><div className="phase"><span className="phase-dot"/> {reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "FACIT VISAS" : "RESULTAT"}</div></div><Map reveal={reveal} guesses={players}/><div className="reveal-controls"><button className="button button--outline" disabled={reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} onClick={()=>setReveal(1)}>{reveal >= 1 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "RÄTT PLATS VISAS ✓" : "VISA RÄTT PLATS"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={reveal < 2} onClick={()=>setReveal(3)}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">OMGÅNGSRESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA OMGÅNG →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
+  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><h1>AW<br/><em>Geografisk</em><br/>edition</h1><div className="round-card"><span>AKTIV OMGÅNG</span><strong>{String(round).padStart(2,"0")}</strong><small>av 10</small></div><div className="progress"><span style={{width:`${Math.min(round*10, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>KLAR</b></div>)}</div><div className="room-qr"><canvas ref={hostQrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div><strong>SKANNA FÖR ATT DELTA</strong><small>Öppna mobilkameran och rikta mot koden.</small></div></div><div className="host-tip"><span>♫</span><div><strong>Spela musiken</strong><small>Frågan ställs utanför appen.</small></div></div></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · OMGÅNG {String(round).padStart(2,"0")}</div><h2>Var i världen?</h2></div><div className="phase"><span className="phase-dot"/> {reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "FACIT VISAS" : "RESULTAT"}</div></div><Map reveal={reveal} guesses={players}/><div className="reveal-controls"><button className="button button--outline" disabled={reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} onClick={()=>setReveal(1)}>{reveal >= 1 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "RÄTT PLATS VISAS ✓" : "VISA RÄTT PLATS"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={reveal < 2} onClick={()=>setReveal(3)}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">OMGÅNGSRESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA OMGÅNG →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
 }
