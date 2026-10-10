@@ -104,4 +104,4 @@
 
 .map-borders-overlay[data-country-detail="true"] .map-border-lines--country path { stroke-width: 1.1px; opacity: .84; }
 .map-borders-overlay[data-regional-detail="true"] .map-border-lines--regional path { stroke-width: .8px; opacity: .72; }
-.map-borders-overlay[data-state-detail="true"] .map-border-lines--state path { stroke-width: 1px; opacity: .78; }
+.map-borders-overlay[data-state-detail="true"] .map-border-lines--state path { stroke-width: .78px; opacity: .68; }
