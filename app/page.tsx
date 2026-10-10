@@ -15,7 +15,7 @@ import type QrScanner from "qr-scanner";
 type Guess = { name: string; color: string; x: number; y: number };
 type QuizQuestion = { id: string; prompt: string; place_label: string; latitude: number; longitude: number; spotify_url: string; spotify_title: string | null; spotify_artist: string | null };
 type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
-type AppMode = "host" | "player" | "admin";
+type AppMode = "host" | "player" | "admin" | "tv";
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 type MapRef = { current: maplibregl.Map | null };
 const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#ff9ee8", "#8fb8ff", "#ffb86b"];
@@ -251,8 +251,13 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
   return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="eyebrow">SPELLEDARINLOGGNING</div><h1>{creating ? "Skapa ditt konto" : "Logga in som spelledare"}</h1><p className="muted">Dina frågor och kartplatser sparas privat till ditt konto.</p><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-post" type="email" autoComplete="email" /><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Lösenord" type="password" autoComplete={creating ? "new-password" : "current-password"} onKeyDown={e=>e.key === "Enter" && void submit()} /><button className="button button--primary button--wide" disabled={!email.trim() || password.length < 6} onClick={()=>void submit()}>{creating ? "SKAPA KONTO" : "LOGGA IN"}</button>{status && <small className="auth-status">{status}</small>}<button className="ghost auth-toggle" onClick={()=>{setCreating(value=>!value);setStatus("");}}>{creating ? "Jag har redan ett konto" : "Skapa nytt konto"}</button></section></main>;
 }
 
+function TvView({ round, prompt, reveal, players, answer }: { round: number; prompt: string; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+  const sortedPlayers = [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer));
+  return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">OMGÅNG {String(round).padStart(2, "0")}</div></header><section className="tv-content"><div className="eyebrow">FRÅGAN</div><h1>{prompt}</h1><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 2} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span>{reveal >= 3 && <b>{distanceKm(player, answer).toLocaleString("sv-SE")} km</b>}</div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div><div className="tv-phase">{reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "RÄTT PLATS VISAS" : "RESULTAT"}</div></section></main>;
+}
+
 export default function Home() {
-  const [mode, setMode] = useState<AppMode>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : typeof window !== "undefined" && window.location.pathname === "/admin" ? "admin" : "host");
+  const [mode, setMode] = useState<AppMode>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : typeof window !== "undefined" && new URLSearchParams(window.location.search).has("tv") ? "tv" : typeof window !== "undefined" && window.location.pathname === "/admin" ? "admin" : "host");
   const [reveal, setReveal] = useState(0);
   const [round, setRound] = useState(4);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
@@ -276,6 +281,7 @@ export default function Home() {
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [activeQuestions, setActiveQuestions] = useState<QuizQuestion[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [broadcastPrompt, setBroadcastPrompt] = useState("Var i världen?");
   const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const questionBankRootRef = useRef<Root | null>(null);
@@ -292,7 +298,8 @@ export default function Home() {
   const [answerStatus, setAnswerStatus] = useState("");
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players, answer]);
   const pickedLngLat = toLngLat(picked);
-  const roomStateRef = useRef({ round, reveal, players, answer });
+  const activePrompt = activeQuestions[activeQuestionIndex]?.prompt ?? "Var i världen?";
+  const roomStateRef = useRef({ round, reveal, players, answer, prompt: activePrompt });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -389,8 +396,8 @@ export default function Home() {
   }, [scanOpen, roomCode]);
 
   useEffect(() => {
-    roomStateRef.current = { round, reveal, players, answer };
-  }, [round, reveal, players, answer]);
+    roomStateRef.current = { round, reveal, players, answer, prompt: activePrompt };
+  }, [round, reveal, players, answer, activePrompt]);
 
   useEffect(() => {
     const channel = supabase
@@ -404,6 +411,7 @@ export default function Home() {
         if (Array.isArray(payload.players)) setPlayers(payload.players as Guess[]);
         if (typeof payload.round === "number") setRound(payload.round);
         if (typeof payload.reveal === "number") setReveal(payload.reveal);
+        if (typeof payload.prompt === "string") setBroadcastPrompt(payload.prompt);
         if (payload.answer && typeof payload.answer.x === "number" && typeof payload.answer.y === "number") setAnswer(payload.answer as { x: number; y: number });
       })
       .on("broadcast", { event: "player_joined" }, ({ payload }) => {
@@ -416,7 +424,7 @@ export default function Home() {
         if (status === "SUBSCRIBED") {
           setConnectionStatus("ANSLUTEN");
           if (mode === "player") void channel.send({ type: "broadcast", event: "room_request", payload: { sessionId } });
-          else void channel.send({ type: "broadcast", event: "room_state", payload: { ...roomStateRef.current, source: "host" } });
+          else if (mode === "host") void channel.send({ type: "broadcast", event: "room_state", payload: { ...roomStateRef.current, source: "host" } });
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           setConnectionStatus("OFFLINE");
         }
@@ -430,8 +438,8 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "host" || !channelRef.current) return;
-    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { round, reveal, players, answer, source: "host" } });
-  }, [mode, round, reveal, players, answer]);
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { round, reveal, players, answer, prompt: activePrompt, source: "host" } });
+  }, [mode, round, reveal, players, answer, activePrompt]);
 
   const findAnswerPlace = async () => {
     const query = answerQuery.trim();
@@ -545,9 +553,10 @@ export default function Home() {
 
   const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
 
-  if (mode !== "player" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
-  if (mode !== "player" && !user) return <AuthScreen onAuthenticated={setUser} />;
+  if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
+  if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
   if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>void supabase.auth.signOut()} />;
+  if (mode === "tv") return <TvView round={round} prompt={broadcastPrompt} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
     {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;

@@ -169,6 +169,22 @@
 .answer-panel .button--wide { width: 100%; margin-top: 9px; }
 .answer-panel > small { display: block; margin-top: 8px; color: #77d6ae; font: 9px 'DM Mono', monospace; }
 .players-empty { display: block; margin-top: 12px; color: var(--muted); font: 10px 'DM Mono', monospace; }
+.tv-shell { min-height: 100vh; background: radial-gradient(circle at 50% 0%, #16353d 0%, #07151b 58%); color: var(--text); }
+.tv-header { display: flex; justify-content: space-between; align-items: center; padding: 24px 42px; border-bottom: 1px solid var(--line); }
+.tv-round { color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .12em; }
+.tv-content { width: min(1500px, calc(100% - 80px)); margin: 0 auto; padding: 48px 0; }
+.tv-content h1 { max-width: 1100px; margin: 12px 0 34px; font-size: clamp(34px, 5vw, 76px); line-height: .98; letter-spacing: -.06em; }
+.tv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
+.tv-map .map-shell { aspect-ratio: 1.75; }
+.tv-scoreboard { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #0d2028aa; }
+.tv-score-row { display: grid; grid-template-columns: 28px 10px 1fr auto; gap: 10px; align-items: center; padding: 16px 0; border-bottom: 1px solid #ffffff12; }
+.tv-score-row strong { color: var(--muted); font: 12px 'DM Mono', monospace; }
+.tv-score-row i { width: 9px; height: 9px; border-radius: 50%; }
+.tv-score-row b { color: var(--lime); font: 12px 'DM Mono', monospace; }
+.tv-score-row--winner span { color: var(--lime); }
+.tv-empty { color: var(--muted); }
+.tv-phase { margin-top: 20px; color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .12em; }
+@media (max-width: 900px) { .tv-header { padding: 18px 22px; } .tv-content { width: min(100% - 32px, 700px); padding: 28px 0; } .tv-grid { grid-template-columns: 1fr; } .tv-scoreboard { order: -1; } .tv-map .map-shell { aspect-ratio: 1.2; } }
 .room-qr canvas { width: 86px; height: 86px; border-radius: 4px; image-rendering: pixelated; flex: 0 0 auto; }
 .room-qr strong { display: block; color: var(--lime); font: 10px 'DM Mono', monospace; letter-spacing: .04em; line-height: 1.35; }
 .room-qr small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.35; }
