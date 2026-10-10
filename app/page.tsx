@@ -32,6 +32,11 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       center: [0, 18], zoom: 1.15, minZoom: 1, maxZoom: 6,
       attributionControl: false, dragRotate: false, touchPitch: false,
     });
+    const bordersSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    bordersSvg.classList.add("map-borders-overlay");
+    bordersSvg.setAttribute("aria-hidden", "true");
+    containerRef.current.appendChild(bordersSvg);
+    bordersRef.current = bordersSvg;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.once("load", () => {
       map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none"));
@@ -76,7 +81,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     map.on("move", drawBorders);
     map.on("resize", drawBorders);
     if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
-    return () => { map.off("load", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
+    return () => { map.off("load", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
   }, [onPick]);
 
   useEffect(() => {
@@ -103,7 +108,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (map.loaded()) render(); else map.once("load", render);
   }, [reveal, guesses, selected]);
 
-  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta"><svg ref={bordersRef} className="map-borders-overlay" aria-hidden="true" /></div>;
+  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta" />;
 }
 
 export default function Home() {
