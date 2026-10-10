@@ -22,7 +22,7 @@ const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
 const normalizeRoomCode = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 const activeQuestionsStorageKey = "musikquiz-active-questions";
-const spotifyClientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? "";
+const spotifyClientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? "989f0e0f03a84ec68946b5fbd43dcef1";
 const spotifyTokenStorageKey = "musikquiz-spotify-token";
 const generateRoomCode = () => {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
