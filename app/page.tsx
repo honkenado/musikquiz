@@ -74,6 +74,7 @@ function Map({ reveal, guesses, answer, onPick, selected, compact = false, showA
     bordersRef.current = bordersSvg;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.once("load", () => {
+      setMapReady(true);
       map.getStyle().layers?.forEach(layer => {
         if (layer.type === "symbol") map.setLayoutProperty(layer.id, "visibility", "none");
       });
@@ -92,7 +93,7 @@ function Map({ reveal, guesses, answer, onPick, selected, compact = false, showA
       }
     });
     mapRef.current = map;
-    const readyTimer = window.setTimeout(() => setMapReady(true), 0);
+    const readyTimer = window.setTimeout(() => setMapReady(true), 500);
     const drawBorders = () => {
       const svg = bordersRef.current;
       const container = containerRef.current;
