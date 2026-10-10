@@ -30,7 +30,21 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       attributionControl: false, dragRotate: false, touchPitch: false,
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
-    map.once("load", () => map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none")));
+    map.once("load", () => {
+      map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none"));
+      if (map.getLayer("boundary_2")) {
+        map.setLayerZoomRange("boundary_2", 2.2, 24);
+        map.setPaintProperty("boundary_2", "line-color", "#9db8bd");
+        map.setPaintProperty("boundary_2", "line-opacity", 0.78);
+        map.setPaintProperty("boundary_2", "line-width", ["interpolate", ["linear"], ["zoom"], 2.2, 0.7, 5, 1.3, 10, 2.2]);
+      }
+      if (map.getLayer("boundary_3")) {
+        map.setLayerZoomRange("boundary_3", 4.5, 24);
+        map.setPaintProperty("boundary_3", "line-color", "#d9ff78");
+        map.setPaintProperty("boundary_3", "line-opacity", 0.55);
+        map.setPaintProperty("boundary_3", "line-width", ["interpolate", ["linear"], ["zoom"], 4.5, 0.8, 8, 1.5, 12, 2.4]);
+      }
+    });
     mapRef.current = map;
     if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
     return () => { markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
