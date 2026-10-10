@@ -168,6 +168,7 @@
 .answer-panel__search .button { padding: 9px 8px; font-size: 9px; }
 .answer-panel .button--wide { width: 100%; margin-top: 9px; }
 .answer-panel > small { display: block; margin-top: 8px; color: #77d6ae; font: 9px 'DM Mono', monospace; }
+.players-empty { display: block; margin-top: 12px; color: var(--muted); font: 10px 'DM Mono', monospace; }
 .room-qr canvas { width: 86px; height: 86px; border-radius: 4px; image-rendering: pixelated; flex: 0 0 auto; }
 .room-qr strong { display: block; color: var(--lime); font: 10px 'DM Mono', monospace; letter-spacing: .04em; line-height: 1.35; }
 .room-qr small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.35; }
