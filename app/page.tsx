@@ -52,6 +52,8 @@ function Map({ reveal, guesses, answer, onPick, selected, compact = false }: { r
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onPickRef = useRef(onPick);
   const [mapReady, setMapReady] = useState(false);
+  const answerX = answer.x;
+  const answerY = answer.y;
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -158,13 +160,14 @@ function Map({ reveal, guesses, answer, onPick, selected, compact = false }: { r
     const map = mapRef.current;
     if (!map) return;
     const render = () => {
-      const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answer)] }, properties: {} })) : [] } as RouteData;
+      const answerPoint = { x: answerX, y: answerY };
+      const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answerPoint)] }, properties: {} })) : [] } as RouteData;
       if (map.getSource("routes")) (map.getSource("routes") as maplibregl.GeoJSONSource).setData(routeData);
       else { map.addSource("routes", { type: "geojson", data: routeData }); map.addLayer({ id: "routes", type: "line", source: "routes", paint: { "line-color": "#d9ff78", "line-width": 1.5, "line-opacity": 0.7, "line-dasharray": [2, 2] } }); }
-      if (reveal >= 3) { const bounds = new maplibregl.LngLatBounds(toLngLat(answer), toLngLat(answer)); guesses.forEach(guess => bounds.extend(toLngLat(guess))); map.fitBounds(bounds, { padding: 80, maxZoom: 3.2, duration: 700 }); }
+      if (reveal >= 3) { const bounds = new maplibregl.LngLatBounds(toLngLat(answerPoint), toLngLat(answerPoint)); guesses.forEach(guess => bounds.extend(toLngLat(guess))); map.fitBounds(bounds, { padding: 80, maxZoom: 3.2, duration: 700 }); }
     };
     if (map.loaded()) render(); else map.once("load", render);
-  }, [answer.x, answer.y, reveal, guesses]);
+  }, [answerX, answerY, reveal, guesses]);
 
   return <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
     <div ref={containerRef} className="map map--real" aria-label="Interaktiv världskarta" />
