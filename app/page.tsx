@@ -25,15 +25,12 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: {
-        version: 8,
-        sources: { carto: { type: "raster", tiles: ["https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"], tileSize: 256, attribution: "© OpenStreetMap © CARTO" } },
-        layers: [{ id: "background", type: "background", paint: { "background-color": "#091a22" } }, { id: "carto", type: "raster", source: "carto", paint: { "raster-opacity": 0.92, "raster-saturation": -0.35, "raster-contrast": 0.18 } }],
-      },
+      style: "https://tiles.openfreemap.org/styles/dark",
       center: [0, 18], zoom: 1.15, minZoom: 1, maxZoom: 6,
       attributionControl: false, dragRotate: false, touchPitch: false,
     });
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    map.once("load", () => map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none")));
     mapRef.current = map;
     if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
     return () => { markersRef.current.forEach(marker => marker.remove()); map.remove(); mapRef.current = null; };
