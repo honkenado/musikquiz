@@ -109,7 +109,8 @@
 .auth-status { display: block; color: var(--orange); margin-top: 12px; line-height: 1.5; }
 .auth-toggle { display: block; width: 100%; margin-top: 16px; }
 .room-qr { display: none; }
-.admin-link { text-decoration: none; margin-top: 18px; }
+  .tv-open-button { text-decoration: none; margin-top: 18px; }
+  .admin-link { text-decoration: none; margin-top: 8px; }
 .qr-open-button { margin-top: 8px; }
 .qr-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #041217cc; }
 .qr-modal__card { width: min(380px, 100%); display: grid; justify-items: center; gap: 14px; padding: 28px; text-align: center; border: 1px solid #d9ff7855; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0009; }
