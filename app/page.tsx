@@ -374,7 +374,11 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
   return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="eyebrow">SPELLEDARINLOGGNING</div><h1>{creating ? "Skapa ditt konto" : "Logga in som spelledare"}</h1><p className="muted">Dina frågor och kartplatser sparas privat till ditt konto.</p><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-post" type="email" autoComplete="email" /><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Lösenord" type="password" autoComplete={creating ? "new-password" : "current-password"} onKeyDown={e=>e.key === "Enter" && void submit()} /><button className="button button--primary button--wide" disabled={!email.trim() || password.length < 6} onClick={()=>void submit()}>{creating ? "SKAPA KONTO" : "LOGGA IN"}</button>{status && <small className="auth-status">{status}</small>}<button className="ghost auth-toggle" onClick={()=>{setCreating(value=>!value);setStatus("");}}>{creating ? "Jag har redan ett konto" : "Skapa nytt konto"}</button></section></main>;
 }
 
-function TvView({ roomCode, round, totalRounds, prompt, category, started, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; category: string; started: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+function FinalPodium({ players }: { players: Guess[] }) {
+  return <div className="final-podium">{players.map((player, index) => <div className={`final-podium-row final-podium-row--${index + 1}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><b>{player.score ?? 0} p</b></div>)}</div>;
+}
+
+function TvView({ roomCode, round, totalRounds, prompt, category, started, finished, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; category: string; started: boolean; finished: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (started || !qrRef.current || !roomCode) return;
@@ -382,6 +386,7 @@ function TvView({ roomCode, round, totalRounds, prompt, category, started, revea
   }, [roomCode, started]);
   const sortedPlayers = [...players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || distanceKm(a, answer) - distanceKm(b, answer));
   if (!started) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">VÄNTAR PÅ START</div></header><section className="tv-lobby"><div className="eyebrow">ANSLUT TILL QUIZET</div><h1>Skanna för att delta</h1><canvas ref={qrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div className="tv-room-code">{roomCode}</div><p>eller skriv in rumskoden på mobilen</p><strong>Spelledaren startar första frågan när alla är redo.</strong></section></main>;
+  if (finished) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">QUIZET ÄR KLART</div></header><section className="tv-content tv-content--finished"><div className="eyebrow">SLUTRESULTAT</div><h1>Prispall</h1><FinalPodium players={sortedPlayers} /></section></main>;
   return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">FRÅGA {String(round).padStart(2, "0")} AV {totalRounds}</div></header><section className="tv-content"><div className="tv-question">{category && <small className="tv-category">{category}</small>}{prompt}</div><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 1} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><small className={player.locked ? "player-ready" : "player-waiting"}>{player.locked ? "KLAR" : "VÄNTAR"}</small><b>{player.score ?? 0} p</b></div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
 }
 
@@ -390,6 +395,7 @@ export default function Home() {
   const [reveal, setReveal] = useState(0);
   const [round, setRound] = useState(1);
   const [started, setStarted] = useState(false);
+  const [quizFinished, setQuizFinished] = useState(false);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
   const [locked, setLocked] = useState(false);
   const [playerName, setPlayerName] = useState("");
@@ -432,6 +438,7 @@ export default function Home() {
   const [answerEditing, setAnswerEditing] = useState(false);
   const [answerStatus, setAnswerStatus] = useState("");
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players, answer]);
+  const scoreSorted = useMemo(() => [...players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || distanceKm(a, answer) - distanceKm(b, answer)), [players, answer]);
   const pickedLngLat = toLngLat(picked);
   const activePrompt = activeQuestions[activeQuestionIndex]?.prompt ?? "Var i världen?";
   const activeCategory = useMemo(() => {
@@ -444,7 +451,7 @@ export default function Home() {
     return "";
   }, [activeQuizOrder, activeQuestionIndex]);
   const roundTotal = Math.max(activeQuestions.length, 1);
-  const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory });
+  const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory });
 
   useEffect(() => {
     if (mode !== "player") return;
@@ -599,8 +606,8 @@ export default function Home() {
   }, [scanOpen, roomCode]);
 
   useEffect(() => {
-    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory };
-  }, [roomCode, round, roundTotal, reveal, started, players, answer, activePrompt, activeCategory]);
+    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory };
+  }, [roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory]);
 
   useEffect(() => {
     const channel = supabase
@@ -617,6 +624,7 @@ export default function Home() {
         if (typeof payload.totalRounds === "number") setBroadcastTotalRounds(payload.totalRounds);
         if (typeof payload.reveal === "number") setReveal(payload.reveal);
         if (typeof payload.started === "boolean") setStarted(payload.started);
+        if (typeof payload.finished === "boolean") setQuizFinished(payload.finished);
         if (typeof payload.prompt === "string") setBroadcastPrompt(payload.prompt);
         if (typeof payload.category === "string") setBroadcastCategory(payload.category);
         if (payload.answer && typeof payload.answer.x === "number" && typeof payload.answer.y === "number") setAnswer(payload.answer as { x: number; y: number });
@@ -659,8 +667,8 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "host" || !channelRef.current) return;
-    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory, source: "host" } });
-  }, [mode, roomCode, round, roundTotal, reveal, started, players, answer, activePrompt, activeCategory]);
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, finished: quizFinished, players, answer, prompt: activePrompt, category: activeCategory, source: "host" } });
+  }, [mode, roomCode, round, roundTotal, reveal, started, quizFinished, players, answer, activePrompt, activeCategory]);
 
   const findAnswerPlace = async () => {
     const query = answerQuery.trim();
@@ -723,7 +731,7 @@ export default function Home() {
     window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(chosen));
     window.localStorage.setItem(activeQuizOrderStorageKey, JSON.stringify(quizOrderItems));
     void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: chosen, items: quizOrderItems } });
-    setActiveQuestions(chosen); setActiveQuizOrder(quizOrderItems); setActiveQuestionIndex(0); setRound(1); setReveal(0); setPlayers([]); setLocked(false);
+    setActiveQuestions(chosen); setActiveQuizOrder(quizOrderItems); setActiveQuestionIndex(0); setRound(1); setReveal(0); setQuizFinished(false); setPlayers([]); setLocked(false);
     const first = chosen[0]; setAnswer(toPercent(first.longitude, first.latitude)); setAnswerLabel(first.place_label); setAnswerQuery(first.place_label);
   };
 
@@ -750,9 +758,11 @@ export default function Home() {
   };
 
   const nextRound = () => {
+    if (quizFinished) return;
     const nextIndex = activeQuestionIndex + 1;
     const nextQuestion = activeQuestions[nextIndex];
-    if (nextQuestion) { setActiveQuestionIndex(nextIndex); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label); }
+    if (!nextQuestion) { setQuizFinished(true); return; }
+    setActiveQuestionIndex(nextIndex); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label);
     setRound(current => current + 1);
     setReveal(0);
     setLocked(false);
@@ -771,6 +781,7 @@ export default function Home() {
         return { ...player, score: (player.score ?? 0) + pointsForRank(current.length, rank) };
       });
     });
+    if (round >= roundTotal) setQuizFinished(true);
   };
 
   const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, orderItems: quizOrderItems, setOrderItems: setQuizOrderItems, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
@@ -778,10 +789,10 @@ export default function Home() {
   if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
   if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>void supabase.auth.signOut()} />;
-  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} started={started} reveal={reveal} players={players} answer={answer} />;
+  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} started={started} finished={quizFinished} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
     {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">FRÅGA {String(round).padStart(2, "0")} AV {broadcastTotalRounds}</span></div>{broadcastCategory && <div className="player-category">{broadcastCategory}</div>}<h2>{broadcastPrompt}</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={[]} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "QUIZET ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
 
-  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><em className={p.locked ? "player-ready" : "player-waiting"}>{p.locked ? "KLAR" : "VÄNTAR"}</em><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>setStarted(true)} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div>{activeCategory && <div className="host-category">{activeCategory}</div>}<h2>{activePrompt}</h2></div><div className="phase"><span className="phase-dot"/> {started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/><div className="reveal-controls"><button className="button button--outline" disabled={!started || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">FRÅGERESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
+  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><em className={p.locked ? "player-ready" : "player-waiting"}>{p.locked ? "KLAR" : "VÄNTAR"}</em><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>{ setStarted(true); setQuizFinished(false); }} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div>{activeCategory && <div className="host-category">{activeCategory}</div>}<h2>{activePrompt}</h2></div><div className="phase"><span className="phase-dot"/> {quizFinished ? "QUIZET ÄR KLART" : started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/><div className="reveal-controls"><button className="button button--outline" disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || quizFinished || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || quizFinished || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">{quizFinished ? "SLUTRESULTAT" : "FRÅGERESULTAT"}</div><h3>{quizFinished ? "Prispall" : "Närmast rätt plats"}</h3></div>{!quizFinished && <button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button>}</div>{quizFinished ? <FinalPodium players={scoreSorted} /> : <div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div>}</div>}</section></div></main>;
 }

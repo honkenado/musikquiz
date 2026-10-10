@@ -208,6 +208,13 @@
 .tv-category, .host-category, .player-category { display: block; margin-bottom: 7px; color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .14em; text-transform: uppercase; }
 .player-category { margin-top: 18px; }
 .tv-content h1 { max-width: 1100px; margin: 12px 0 34px; font-size: clamp(34px, 5vw, 76px); line-height: .98; letter-spacing: -.06em; }
+.tv-content--finished { max-width: 1100px; }
+.final-podium { display: grid; gap: 10px; max-width: 760px; }
+.final-podium-row { display: grid; grid-template-columns: 42px 12px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 18px 20px; border: 1px solid var(--line); border-radius: 10px; background: #0d2028aa; }
+.final-podium-row i { width: 11px; height: 11px; border-radius: 50%; }
+.final-podium-row strong { color: var(--muted); font: 12px 'DM Mono', monospace; }
+.final-podium-row b { color: var(--lime); font: 700 15px 'DM Mono', monospace; }
+.final-podium-row--1 { border-color: #d9ff7888; background: #d9ff7818; transform: scale(1.02); }
 .tv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
 .tv-map .map-shell { aspect-ratio: 1.75; }
 .tv-scoreboard { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #0d2028aa; }
