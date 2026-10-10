@@ -381,6 +381,7 @@ export default function Home() {
     const selected = questions.filter(question => selectedQuestionIds.includes(question.id));
     if (selected.length) window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(selected));
     else window.localStorage.removeItem(activeQuestionsStorageKey);
+    void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: selected } });
   }, [mode, questions, selectedQuestionIds]);
 
   useEffect(() => {
