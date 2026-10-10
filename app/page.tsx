@@ -846,7 +846,7 @@ export default function Home() {
 
   if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
-  if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>void supabase.auth.signOut()} />;
+  if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>{ window.localStorage.removeItem(spotifyTokenStorageKey); window.sessionStorage.removeItem(spotifyTokenStorageKey); void supabase.auth.signOut(); }} />;
   if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} started={started} finished={quizFinished} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player" && joined && quizFinished) return <MobileFinalView players={scoreSorted} playerName={playerName} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
