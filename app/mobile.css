@@ -111,6 +111,8 @@
 .room-qr { display: none; }
 .tv-open-button { margin-top: 18px; }
 .admin-link { text-decoration: none; margin-top: 8px; }
+.host-session-panel { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #0d2028aa; }
+.host-session-panel p { margin: 8px 0 12px; font-size: 12px; line-height: 1.45; }
 .qr-open-button { margin-top: 8px; }
 .qr-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #041217cc; }
 .qr-modal__card { width: min(380px, 100%); display: grid; justify-items: center; gap: 14px; padding: 28px; text-align: center; border: 1px solid #d9ff7855; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0009; }
@@ -184,6 +186,12 @@
 .tv-score-row b { color: var(--lime); font: 12px 'DM Mono', monospace; }
 .tv-score-row--winner span { color: var(--lime); }
 .tv-empty { color: var(--muted); }
+.tv-lobby { min-height: calc(100vh - 100px); display: grid; place-items: center; align-content: center; gap: 18px; padding: 48px 20px; text-align: center; }
+.tv-lobby h1 { margin: 0; font-size: clamp(38px, 6vw, 82px); letter-spacing: -.06em; }
+.tv-lobby canvas { width: min(260px, 55vw); height: auto; margin-top: 12px; border-radius: 8px; }
+.tv-room-code { color: var(--lime); font: 700 clamp(36px, 5vw, 64px) 'DM Mono', monospace; letter-spacing: .18em; }
+.tv-lobby p { margin: -8px 0 4px; color: var(--muted); }
+.tv-lobby strong { color: var(--text); font: 12px 'DM Mono', monospace; letter-spacing: .08em; }
 .tv-phase { margin-top: 20px; color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .12em; }
 @media (max-width: 900px) { .tv-header { padding: 18px 22px; } .tv-content { width: min(100% - 32px, 700px); padding: 28px 0; } .tv-grid { grid-template-columns: 1fr; } .tv-scoreboard { order: -1; } .tv-map .map-shell { aspect-ratio: 1.2; } }
 .room-qr canvas { width: 86px; height: 86px; border-radius: 4px; image-rendering: pixelated; flex: 0 0 auto; }

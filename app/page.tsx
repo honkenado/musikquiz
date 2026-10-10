@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { createRoot, type Root } from "react-dom/client";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { supabase } from "./supabase";
@@ -22,6 +21,10 @@ const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#f
 const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
 const normalizeRoomCode = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+const generateRoomCode = () => {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+};
 
 const upsertPlayer = (current: Guess[], incoming: Guess) => {
   const existingIndex = current.findIndex(player => player.name.toLowerCase() === incoming.name.toLowerCase());
@@ -220,18 +223,12 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
   return <div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div></div></div>;
 }
 
-function RoomQrPanel({ roomCode }: { roomCode: string }) {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [open, setOpen] = useState(false);
+function HostSessionPanel({ started, onStart }: { started: boolean; onStart: () => void }) {
     const openTvWindow = () => {
       const tvWindow = window.open(`${window.location.origin}/?tv=1`, "musikquiz-tv", "popup=yes,width=1600,height=1000");
       if (tvWindow) tvWindow.focus();
     };
-  useEffect(() => {
-    if (!open || !canvasRef.current) return;
-    void import("qrcode").then(QRCode => { if (canvasRef.current) void QRCode.toCanvas(canvasRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, { width: 260, margin: 2, color: { dark: "#081218", light: "#e6e6c4" } }); });
-  }, [open, roomCode]);
-  return <><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><button className="button button--outline button--wide qr-open-button" onClick={()=>setOpen(true)}>VISA QR-KOD FÖR RUMMET</button>{open && <div className="qr-modal" role="dialog" aria-modal="true" aria-label="QR-kod för rummet"><div className="qr-modal__card"><div className="eyebrow">SKANNA FÖR ATT DELTA</div><h2>Rum {roomCode}</h2><canvas ref={canvasRef} /><p className="muted">Spelarna skannar koden med mobilkameran.</p><button className="button button--outline" onClick={()=>setOpen(false)}>STÄNG</button></div></div>}</>;
+  return <div className="host-session-panel"><div className="eyebrow">TV-LÄGE</div><p className="muted">Öppna TV-fönstret för rumskod och QR-kod.</p><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><button className="button button--outline button--wide" disabled={started} onClick={onStart}>{started ? "OMGÅNGEN ÄR STARTAD" : "STARTA OMGÅNGEN"}</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a></div>;
 }
 
 function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {
@@ -255,8 +252,14 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
   return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="eyebrow">SPELLEDARINLOGGNING</div><h1>{creating ? "Skapa ditt konto" : "Logga in som spelledare"}</h1><p className="muted">Dina frågor och kartplatser sparas privat till ditt konto.</p><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-post" type="email" autoComplete="email" /><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Lösenord" type="password" autoComplete={creating ? "new-password" : "current-password"} onKeyDown={e=>e.key === "Enter" && void submit()} /><button className="button button--primary button--wide" disabled={!email.trim() || password.length < 6} onClick={()=>void submit()}>{creating ? "SKAPA KONTO" : "LOGGA IN"}</button>{status && <small className="auth-status">{status}</small>}<button className="ghost auth-toggle" onClick={()=>{setCreating(value=>!value);setStatus("");}}>{creating ? "Jag har redan ett konto" : "Skapa nytt konto"}</button></section></main>;
 }
 
-function TvView({ round, reveal, players, answer }: { round: number; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+function TvView({ roomCode, round, started, reveal, players, answer }: { roomCode: string; round: number; started: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+  const qrRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (started || !qrRef.current || !roomCode) return;
+    void import("qrcode").then(QRCode => { if (qrRef.current) void QRCode.toCanvas(qrRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, { width: 260, margin: 2, color: { dark: "#081218", light: "#e6e6c4" } }); });
+  }, [roomCode, started]);
   const sortedPlayers = [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer));
+  if (!started) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">VÄNTAR PÅ START</div></header><section className="tv-lobby"><div className="eyebrow">ANSLUT TILL OMGÅNGEN</div><h1>Skanna för att delta</h1><canvas ref={qrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div className="tv-room-code">{roomCode}</div><p>eller skriv in rumskoden på mobilen</p><strong>Spelledaren startar omgång {String(round).padStart(2, "0")} när alla är redo.</strong></section></main>;
   return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">OMGÅNG {String(round).padStart(2, "0")}</div></header><section className="tv-content"><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 2} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span>{reveal >= 3 && <b>{distanceKm(player, answer).toLocaleString("sv-SE")} km</b>}</div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
 }
 
@@ -264,6 +267,7 @@ export default function Home() {
   const [mode, setMode] = useState<AppMode>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : typeof window !== "undefined" && new URLSearchParams(window.location.search).has("tv") ? "tv" : typeof window !== "undefined" && window.location.pathname === "/admin" ? "admin" : "host");
   const [reveal, setReveal] = useState(0);
   const [round, setRound] = useState(4);
+  const [started, setStarted] = useState(false);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
   const [locked, setLocked] = useState(false);
   const [playerName, setPlayerName] = useState("");
@@ -288,12 +292,12 @@ export default function Home() {
   const [broadcastPrompt, setBroadcastPrompt] = useState("Var i världen?");
   const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const questionBankRootRef = useRef<Root | null>(null);
-  const questionBankMountRef = useRef<HTMLDivElement | null>(null);
-  const hostQrRef = useRef<HTMLCanvasElement>(null);
   const scanVideoRef = useRef<HTMLVideoElement>(null);
   const qrScannerRef = useRef<QrScanner | null>(null);
-  const roomCode = "NORD 7K";
+  const [roomCode, setRoomCode] = useState(() => {
+    if (typeof window === "undefined") return generateRoomCode();
+    return normalizeRoomCode(new URLSearchParams(window.location.search).get("room") ?? generateRoomCode());
+  });
   const ready = players.length;
   const [answer, setAnswer] = useState(defaultAnswer);
   const [answerLabel, setAnswerLabel] = useState("Välj facitplats");
@@ -303,7 +307,7 @@ export default function Home() {
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players, answer]);
   const pickedLngLat = toLngLat(picked);
   const activePrompt = activeQuestions[activeQuestionIndex]?.prompt ?? "Var i världen?";
-  const roomStateRef = useRef({ round, reveal, players, answer, prompt: activePrompt });
+  const roomStateRef = useRef({ roomCode, round, reveal, started, players, answer, prompt: activePrompt });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -354,20 +358,6 @@ export default function Home() {
   }, [questionSpotifyUrl]);
 
   useEffect(() => {
-    if (mode !== "host" || !hostQrRef.current) return;
-    let active = true;
-    void import("qrcode").then(QRCode => {
-      if (!active || !hostQrRef.current) return;
-      void QRCode.toCanvas(hostQrRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, {
-        width: 156,
-        margin: 1,
-        color: { dark: "#081218", light: "#e6e6c4" },
-      });
-    });
-    return () => { active = false; };
-  }, [mode, roomCode]);
-
-  useEffect(() => {
     if (!scanOpen || !scanVideoRef.current) return;
     let cancelled = false;
     let scanner: QrScanner | null = null;
@@ -400,8 +390,8 @@ export default function Home() {
   }, [scanOpen, roomCode]);
 
   useEffect(() => {
-    roomStateRef.current = { round, reveal, players, answer, prompt: activePrompt };
-  }, [round, reveal, players, answer, activePrompt]);
+    roomStateRef.current = { roomCode, round, reveal, started, players, answer, prompt: activePrompt };
+  }, [roomCode, round, reveal, started, players, answer, activePrompt]);
 
   useEffect(() => {
     const channel = supabase
@@ -412,9 +402,11 @@ export default function Home() {
       })
       .on("broadcast", { event: "room_state" }, ({ payload }) => {
         if (mode === "host" || payload?.source !== "host") return;
+        if (typeof payload.roomCode === "string") setRoomCode(normalizeRoomCode(payload.roomCode));
         if (Array.isArray(payload.players)) setPlayers(payload.players as Guess[]);
         if (typeof payload.round === "number") setRound(payload.round);
         if (typeof payload.reveal === "number") setReveal(payload.reveal);
+        if (typeof payload.started === "boolean") setStarted(payload.started);
         if (typeof payload.prompt === "string") setBroadcastPrompt(payload.prompt);
         if (payload.answer && typeof payload.answer.x === "number" && typeof payload.answer.y === "number") setAnswer(payload.answer as { x: number; y: number });
       })
@@ -442,8 +434,8 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "host" || !channelRef.current) return;
-    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { round, reveal, players, answer, prompt: activePrompt, source: "host" } });
-  }, [mode, round, reveal, players, answer, activePrompt]);
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, reveal, started, players, answer, prompt: activePrompt, source: "host" } });
+  }, [mode, roomCode, round, reveal, started, players, answer, activePrompt]);
 
   const findAnswerPlace = async () => {
     const query = answerQuery.trim();
@@ -507,22 +499,6 @@ export default function Home() {
     const first = chosen[0]; setAnswer(toPercent(first.longitude, first.latitude)); setAnswerLabel(first.place_label); setAnswerQuery(first.place_label);
   };
 
-  useEffect(() => {
-    if (mode !== "host" || !user) {
-      questionBankRootRef.current?.unmount(); questionBankRootRef.current = null; questionBankMountRef.current?.remove(); questionBankMountRef.current = null;
-      return;
-    }
-    const sidebar = document.querySelector(".sidebar");
-    if (!sidebar || questionBankRootRef.current) return;
-    const mount = document.createElement("div"); mount.className = "question-bank-mount"; const qrPanel = sidebar.querySelector(".room-qr"); if (qrPanel) sidebar.insertBefore(mount, qrPanel); else sidebar.appendChild(mount); questionBankMountRef.current = mount; questionBankRootRef.current = createRoot(mount);
-    return () => { questionBankRootRef.current?.unmount(); questionBankRootRef.current = null; questionBankMountRef.current?.remove(); questionBankMountRef.current = null; };
-  }, [mode, user]);
-
-  useEffect(() => {
-    if (!questionBankRootRef.current) return;
-    questionBankRootRef.current.render(<RoomQrPanel roomCode={roomCode} />);
-  }, [roomCode]);
-
   const joinRoom = () => {
     const baseName = playerName.trim().slice(0, 24);
     if (!baseName || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode) || connectionStatus === "OFFLINE") return;
@@ -549,6 +525,8 @@ export default function Home() {
     const nextIndex = activeQuestionIndex + 1;
     const nextQuestion = activeQuestions[nextIndex];
     if (nextQuestion) { setActiveQuestionIndex(nextIndex); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label); }
+    setRoomCode(generateRoomCode());
+    setStarted(false);
     setRound(current => current + 1);
     setReveal(0);
     setLocked(false);
@@ -560,10 +538,10 @@ export default function Home() {
   if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
   if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>void supabase.auth.signOut()} />;
-  if (mode === "tv") return <TvView round={round} reveal={reveal} players={players} answer={answer} />;
+  if (mode === "tv") return <TvView roomCode={roomCode} round={round} started={started} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
     {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
 
- return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>AKTIV OMGÅNG</span><strong>{String(round).padStart(2,"0")}</strong><small>av 10</small></div><div className="progress"><span style={{width:`${Math.min(round*10, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>KLAR</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><div className="answer-panel"><div className="eyebrow">FACITPLATS</div><strong>{answerLabel}</strong><div className="answer-panel__search"><input value={answerQuery} onChange={e=>setAnswerQuery(e.target.value)} onKeyDown={e=>e.key === "Enter" && void findAnswerPlace()} placeholder="Skriv t.ex. Köpenhamn" /><button className="button button--secondary" onClick={() => void findAnswerPlace()}>SÖK</button></div><button className={`button button--wide ${answerEditing ? "button--done" : "button--outline"}`} onClick={() => { setAnswerEditing(current => !current); setAnswerStatus(""); }}>{answerEditing ? "KLICKA PÅ KARTAN ✓" : "SÄTT FACIT PÅ KARTAN"}</button>{answerStatus && <small>{answerStatus}</small>}</div><div className="room-qr"><canvas ref={hostQrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div><strong>SKANNA FÖR ATT DELTA</strong><small>Öppna mobilkameran och rikta mot koden.</small></div></div></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · OMGÅNG {String(round).padStart(2,"0")}</div><h2>Var i världen?</h2></div><div className="phase"><span className="phase-dot"/> {reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "FACIT VISAS" : "RESULTAT"}</div></div><Map reveal={reveal} guesses={players} answer={answer} showAnswer onPick={answerEditing ? ((x,y) => { setAnswer({x,y}); setAnswerLabel("Manuellt facit"); setAnswerStatus("FACIT UPPDATERAT"); setAnswerEditing(false); }) : undefined}/><div className="reveal-controls"><button className="button button--outline" disabled={reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} onClick={()=>setReveal(1)}>{reveal >= 1 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "RÄTT PLATS VISAS ✓" : "VISA RÄTT PLATS"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={reveal < 2} onClick={()=>setReveal(3)}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">OMGÅNGSRESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA OMGÅNG →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
+  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>NÄSTA OMGÅNG</span><strong>{String(round).padStart(2,"0")}</strong><small>av 10</small></div><div className="progress"><span style={{width:`${Math.min(round*10, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>KLAR</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>setStarted(true)} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · OMGÅNG {String(round).padStart(2,"0")}</div><h2>Var i världen?</h2></div><div className="phase"><span className="phase-dot"/> {started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "GISSNINGAR VISAS" : reveal === 2 ? "FACIT VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer} showAnswer/><div className="reveal-controls"><button className="button button--outline" disabled={!started || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started} onClick={()=>setReveal(1)}>{reveal >= 1 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "RÄTT PLATS VISAS ✓" : "VISA RÄTT PLATS"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || reveal < 2} onClick={()=>setReveal(3)}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">OMGÅNGSRESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA OMGÅNG →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
 }
