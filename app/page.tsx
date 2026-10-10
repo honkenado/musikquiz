@@ -266,7 +266,7 @@ function TvView({ roomCode, round, started, reveal, players, answer }: { roomCod
 export default function Home() {
   const [mode, setMode] = useState<AppMode>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : typeof window !== "undefined" && new URLSearchParams(window.location.search).has("tv") ? "tv" : typeof window !== "undefined" && window.location.pathname === "/admin" ? "admin" : "host");
   const [reveal, setReveal] = useState(0);
-  const [round, setRound] = useState(4);
+  const [round, setRound] = useState(1);
   const [started, setStarted] = useState(false);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
   const [locked, setLocked] = useState(false);
