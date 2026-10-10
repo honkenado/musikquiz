@@ -15,6 +15,7 @@ import type QrScanner from "qr-scanner";
 type Guess = { name: string; color: string; x: number; y: number };
 type QuizQuestion = { id: string; prompt: string; place_label: string; latitude: number; longitude: number; spotify_url: string; spotify_title: string | null; spotify_artist: string | null };
 type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; findPlace: () => void; save: () => void; useSelected: () => void };
+type AppMode = "host" | "player" | "admin";
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 type MapRef = { current: maplibregl.Map | null };
 const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#ff9ee8", "#8fb8ff", "#ffb86b"];
@@ -216,6 +217,20 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
   return <div className="question-bank"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>setSelectedIds(current=>event.target.checked ? [...current, question.id] : current.filter(id=>id !== question.id))} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I OMGÅNGEN ({selectedIds.length})</button></div>;
 }
 
+function RoomQrPanel({ roomCode }: { roomCode: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open || !canvasRef.current) return;
+    void import("qrcode").then(QRCode => { if (canvasRef.current) void QRCode.toCanvas(canvasRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, { width: 260, margin: 2, color: { dark: "#081218", light: "#e6e6c4" } }); });
+  }, [open, roomCode]);
+  return <><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><button className="button button--outline button--wide qr-open-button" onClick={()=>setOpen(true)}>VISA QR-KOD FÖR RUMMET</button>{open && <div className="qr-modal" role="dialog" aria-modal="true" aria-label="QR-kod för rummet"><div className="qr-modal__card"><div className="eyebrow">SKANNA FÖR ATT DELTA</div><h2>Rum {roomCode}</h2><canvas ref={canvasRef} /><p className="muted">Spelarna skannar koden med mobilkameran.</p><button className="button button--outline" onClick={()=>setOpen(false)}>STÄNG</button></div></div>}</>;
+}
+
+function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {
+  return <main className="shell shell--admin"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="admin-nav"><button className="ghost" onClick={onBack}>Spelledarvy</button><button className="ghost" onClick={onLogout}>Logga ut</button></div></header><section className="admin-content"><div className="eyebrow">ADMINVY</div><h1>Frågebank</h1><p className="muted">Skapa frågor med plats och Spotifylänk. Välj sedan vilka som ska användas i nästa omgång.</p><QuestionBankPanel {...bank} /></section></main>;
+}
+
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -234,7 +249,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
 }
 
 export default function Home() {
-  const [mode, setMode] = useState<"host" | "player">(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : "host");
+  const [mode, setMode] = useState<AppMode>(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("room") ? "player" : typeof window !== "undefined" && window.location.pathname === "/admin" ? "admin" : "host");
   const [reveal, setReveal] = useState(0);
   const [round, setRound] = useState(4);
   const [picked, setPicked] = useState({ x: 45, y: 46 });
@@ -469,7 +484,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!questionBankRootRef.current) return;
-    questionBankRootRef.current.render(<QuestionBankPanel questions={questions} prompt={questionPrompt} setPrompt={setQuestionPrompt} place={questionPlaceQuery} setPlace={setQuestionPlaceQuery} spotifyUrl={questionSpotifyUrl} setSpotifyUrl={setQuestionSpotifyUrl} point={questionPoint} preview={spotifyPreview} status={questionStatus} selectedIds={selectedQuestionIds} setSelectedIds={setSelectedQuestionIds} findPlace={() => void findQuestionPlace()} save={() => void saveQuestion()} useSelected={useSelectedQuestions} />);
+    questionBankRootRef.current.render(<><QuestionBankPanel questions={questions} prompt={questionPrompt} setPrompt={setQuestionPrompt} place={questionPlaceQuery} setPlace={setQuestionPlaceQuery} spotifyUrl={questionSpotifyUrl} setSpotifyUrl={setQuestionSpotifyUrl} point={questionPoint} preview={spotifyPreview} status={questionStatus} selectedIds={selectedQuestionIds} setSelectedIds={setSelectedQuestionIds} findPlace={() => void findQuestionPlace()} save={() => void saveQuestion()} useSelected={useSelectedQuestions} /><RoomQrPanel roomCode={roomCode} /></>);
   }, [questions, questionPrompt, questionPlaceQuery, questionSpotifyUrl, questionPoint, spotifyPreview, questionStatus, selectedQuestionIds]);
 
   const joinRoom = () => {
@@ -504,8 +519,11 @@ export default function Home() {
     setPlayers(current => current.map(player => ({ ...player, x: 45, y: 46 })));
   };
 
-  if (mode === "host" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
-  if (mode === "host" && !user) return <AuthScreen onAuthenticated={setUser} />;
+  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
+
+  if (mode !== "player" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
+  if (mode !== "player" && !user) return <AuthScreen onAuthenticated={setUser} />;
+  if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>setMode("host")} onLogout={()=>void supabase.auth.signOut()} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
     {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">OMGÅNG {String(round).padStart(2, "0")}</span></div><h2>Var i världen hörde du<br/>den här låten?</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={players} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "OMGÅNGEN ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
