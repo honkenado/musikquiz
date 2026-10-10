@@ -377,6 +377,13 @@ export default function Home() {
   }, [mode, questions]);
 
   useEffect(() => {
+    if (mode !== "admin" || !questions.length) return;
+    const selected = questions.filter(question => selectedQuestionIds.includes(question.id));
+    if (selected.length) window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(selected));
+    else window.localStorage.removeItem(activeQuestionsStorageKey);
+  }, [mode, questions, selectedQuestionIds]);
+
+  useEffect(() => {
     const match = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/);
     if (!match) { window.setTimeout(() => setSpotifyPreview(null), 0); return; }
     const timer = window.setTimeout(() => {
@@ -583,8 +590,6 @@ export default function Home() {
     const nextIndex = activeQuestionIndex + 1;
     const nextQuestion = activeQuestions[nextIndex];
     if (nextQuestion) { setActiveQuestionIndex(nextIndex); setAnswer(toPercent(nextQuestion.longitude, nextQuestion.latitude)); setAnswerLabel(nextQuestion.place_label); setAnswerQuery(nextQuestion.place_label); }
-    setRoomCode(generateRoomCode());
-    setStarted(false);
     setRound(current => current + 1);
     setReveal(0);
     setLocked(false);
