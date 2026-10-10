@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import countryBorders from "./data/country-borders.json";
-import usStates from "./data/us-states.json";
+import admin1Lines from "./data/admin1-lines.json";
 import countries from "./data/countries.json";
 import lakes from "./data/lakes.json";
 
@@ -76,7 +76,9 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         return (coordinates as unknown[]).map(item => pathFor(item, close)).join(" ");
       };
       const countryFeatures = Array.isArray((countryBorders as { features?: unknown[] }).features) ? (countryBorders as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
-      const stateFeatures = Array.isArray((usStates as { features?: unknown[] }).features) ? (usStates as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
+      const regionalFeatures = Array.isArray((admin1Lines as { features?: unknown[] }).features)
+        ? (admin1Lines as { features: Array<{ geometry: { coordinates: unknown }; properties?: { country?: string } }> }).features
+        : [];
       const landFeatures = Array.isArray((countries as { features?: unknown[] }).features) ? (countries as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
       const lakeFeatures = Array.isArray((lakes as { features?: unknown[] }).features) ? (lakes as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
       const landPaths = landFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean);
@@ -93,13 +95,19 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
           map.setPaintProperty(layerId, "line-opacity", 0.78);
         }
       });
-      const paths = map.getZoom() >= 3.2 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
-      const statePaths = map.getZoom() >= 4.8
-        ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
+      const zoom = map.getZoom();
+      const paths = zoom >= 2.15 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
+      const regionalPaths = zoom >= 3.3
+        ? regionalFeatures.filter(feature => feature.properties?.country !== "USA").map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean)
         : [];
-      svg.setAttribute("data-detail", map.getZoom() >= 3.2 ? "true" : "false");
+      const statePaths = zoom >= 4.15
+        ? regionalFeatures.filter(feature => feature.properties?.country === "USA").map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean)
+        : [];
+      svg.setAttribute("data-country-detail", zoom >= 2.15 ? "true" : "false");
+      svg.setAttribute("data-regional-detail", zoom >= 3.3 ? "true" : "false");
+      svg.setAttribute("data-state-detail", zoom >= 4.15 ? "true" : "false");
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
-      svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%" style="fill:#347b96;opacity:.92"/><g class="map-land-overlay" style="fill:#e6e6c4;opacity:.88">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay" style="fill:#347b96;opacity:.98">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country" style="stroke:#58645b;stroke-width:1px;opacity:.86">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state" style="stroke:#68756a;stroke-width:.9px;opacity:.72">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
+      svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%" style="fill:#347b96;opacity:.92"/><g class="map-land-overlay" style="fill:#e6e6c4;opacity:.88">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay" style="fill:#347b96;opacity:.98">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country" style="stroke:#58645b;stroke-width:1px;opacity:.86">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--regional" style="stroke:#7b887b;stroke-width:.7px;opacity:.62">${regionalPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state" style="stroke:#6f7d70;stroke-width:.8px;opacity:.68">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };
     map.on("load", drawBorders);
     map.on("idle", drawBorders);
