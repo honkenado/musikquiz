@@ -39,8 +39,13 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
   const bordersRef = useRef<SVGSVGElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const onPickRef = useRef(onPick);
   const toLngLat = (point: { x: number; y: number }) => [point.x * 3.6 - 180, 90 - point.y * 1.8] as [number, number];
   const toPercent = (lng: number, lat: number) => ({ x: Math.round((lng + 180) / 3.6), y: Math.round((90 - lat) / 1.8) });
+
+  useEffect(() => {
+    onPickRef.current = onPick;
+  }, [onPick]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -130,9 +135,13 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     map.on("move", drawBorders);
     map.on("resize", drawBorders);
     window.setTimeout(drawBorders, 900);
-    if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
-    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
-  }, [onPick]);
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      const pick = onPickRef.current;
+      if (pick) pick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]);
+    };
+    map.on("click", handleClick);
+    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); map.off("click", handleClick); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
