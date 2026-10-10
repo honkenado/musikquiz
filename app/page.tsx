@@ -86,7 +86,6 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         if (map.getLayer(layerId)) {
           map.setPaintProperty(layerId, "fill-color", "#174b56");
           map.setPaintProperty(layerId, "fill-opacity", 1);
-          map.setPaintProperty(layerId, "fill-outline-color", "#2c7480");
         }
       });
       ["waterway_river", "waterway_other"].forEach(layerId => {
