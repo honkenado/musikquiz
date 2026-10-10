@@ -2,7 +2,7 @@
   min-height: 100dvh;
 }
 
-.map--real .maplibregl-canvas { outline: none; filter: brightness(.62) saturate(.82) contrast(1.08); }
+.map--real .maplibregl-canvas { outline: none; filter: none; }
 .map--real .maplibregl-ctrl-attrib { background: #081218cc; color: #8aa1a8; font: 9px 'DM Mono', monospace; }
 .map--real .maplibregl-ctrl-attrib a { color: #b7c9c4; }
 .map-pin { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; background: var(--pin-color, var(--orange)); border: 2px solid #fff; transform: rotate(-45deg); box-shadow: 0 0 0 4px #ffffff26, 0 0 18px #0009; pointer-events: none; }
@@ -76,24 +76,24 @@
   stroke-linecap: round;
 }
 
-.map-water-overlay { fill: #244b56; opacity: .2; }
-.map-land-overlay path { fill: #9aa995; opacity: .08; }
-.map-lakes-overlay path { fill: #2b6572; opacity: .82; }
+.map-water-overlay { fill: #347b96; opacity: .92; }
+.map-land-overlay path { fill: #e6e6c4; opacity: .88; }
+.map-lakes-overlay path { fill: #347b96; opacity: .98; }
 
-.map-borders-overlay[data-detail="true"] .map-water-overlay { opacity: .3; }
-.map-borders-overlay[data-detail="true"] .map-land-overlay path { opacity: .13; }
-.map-borders-overlay[data-detail="true"] .map-lakes-overlay path { opacity: .94; }
+.map-borders-overlay[data-detail="true"] .map-water-overlay { opacity: .94; }
+.map-borders-overlay[data-detail="true"] .map-land-overlay path { opacity: .9; }
+.map-borders-overlay[data-detail="true"] .map-lakes-overlay path { opacity: 1; }
 
 .map-border-lines--country path {
-  stroke: #c0d0a6;
+  stroke: #58645b;
   stroke-width: 1px;
-  opacity: .72;
+  opacity: .86;
 }
 
 .map-border-lines--state path {
-  stroke: #8ec4ca;
-  stroke-width: 1px;
-  opacity: .7;
+  stroke: #68756a;
+  stroke-width: .9px;
+  opacity: .72;
 }
 
 .map-borders-overlay[data-detail="true"] .map-border-lines--country path { stroke-width: 1.1px; opacity: .84; }
