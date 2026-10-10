@@ -245,8 +245,8 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
       ? await supabase.auth.signUp({ email: email.trim(), password })
       : await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (result.error) { setStatus(result.error.message); return; }
-    if (result.data.user) onAuthenticated(result.data.user);
-    else setStatus("Kontrollera din e-post för att bekräfta kontot.");
+    if (result.data.session?.user) onAuthenticated(result.data.session.user);
+    else setStatus("Kontrollera din e-post för att bekräfta kontot och logga sedan in.");
   };
   return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="eyebrow">SPELLEDARINLOGGNING</div><h1>{creating ? "Skapa ditt konto" : "Logga in som spelledare"}</h1><p className="muted">Dina frågor och kartplatser sparas privat till ditt konto.</p><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-post" type="email" autoComplete="email" /><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Lösenord" type="password" autoComplete={creating ? "new-password" : "current-password"} onKeyDown={e=>e.key === "Enter" && void submit()} /><button className="button button--primary button--wide" disabled={!email.trim() || password.length < 6} onClick={()=>void submit()}>{creating ? "SKAPA KONTO" : "LOGGA IN"}</button>{status && <small className="auth-status">{status}</small>}<button className="ghost auth-toggle" onClick={()=>{setCreating(value=>!value);setStatus("");}}>{creating ? "Jag har redan ett konto" : "Skapa nytt konto"}</button></section></main>;
 }
@@ -470,11 +470,14 @@ export default function Home() {
   };
 
   const saveQuestion = async () => {
-    if (!user || !questionPrompt.trim() || !questionPoint || !questionSpotifyUrl.trim()) return;
+    if (!questionPrompt.trim() || !questionPoint || !questionSpotifyUrl.trim()) return;
     setQuestionStatus("SPARAR...");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUser = sessionData.session?.user;
+    if (!currentUser) { setQuestionStatus("KUNDE INTE SPARA: LOGGA IN IGEN"); return; }
     const spotifyTrackId = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/)?.[1] ?? null;
-    const { error } = await supabase.from("quiz_questions").insert({ owner_id: user.id, prompt: questionPrompt.trim(), place_label: questionPlaceQuery.trim(), latitude: questionPoint.latitude, longitude: questionPoint.longitude, spotify_url: questionSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, spotify_title: spotifyPreview?.title ?? null, spotify_artist: spotifyPreview?.artist ?? null });
-    if (error) { setQuestionStatus(error.code === "42501" ? "KUNDE INTE SPARA: LOGGA IN IGEN" : `KUNDE INTE SPARA: ${error.message}`); return; }
+    const { error } = await supabase.from("quiz_questions").insert({ owner_id: currentUser.id, prompt: questionPrompt.trim(), place_label: questionPlaceQuery.trim(), latitude: questionPoint.latitude, longitude: questionPoint.longitude, spotify_url: questionSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, spotify_title: spotifyPreview?.title ?? null, spotify_artist: spotifyPreview?.artist ?? null });
+    if (error) { setQuestionStatus(error.code === "42501" ? "KUNDE INTE SPARA: SESSIONEN GICK UT, LOGGA IN IGEN" : `KUNDE INTE SPARA: ${error.message}`); return; }
     const { data: refreshed } = await supabase.from("quiz_questions").select("id,prompt,place_label,latitude,longitude,spotify_url,spotify_title,spotify_artist").order("created_at", { ascending: false });
     if (refreshed) setQuestions(refreshed as QuizQuestion[]);
     setQuestionPrompt(""); setQuestionPlaceQuery(""); setQuestionPoint(null); setQuestionSpotifyUrl(""); setSpotifyPreview(null); setQuestionStatus("FRÅGAN SPARAD");
