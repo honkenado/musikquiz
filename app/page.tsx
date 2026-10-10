@@ -44,6 +44,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       map.getStyle().layers?.forEach(layer => {
         if (layer.type === "symbol") map.setLayoutProperty(layer.id, "visibility", "none");
       });
+      if (map.getLayer("ne2_shaded")) map.setPaintProperty("ne2_shaded", "raster-opacity", 0.68);
       if (map.getLayer("boundary_2")) {
         map.setLayerZoomRange("boundary_2", 1, 24);
         map.setPaintProperty("boundary_2", "line-color", "#d9ff78");

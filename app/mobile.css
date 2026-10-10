@@ -76,12 +76,12 @@
   stroke-linecap: round;
 }
 
-.map-water-overlay { fill: #244b56; opacity: .34; }
-.map-land-overlay path { fill: #9aa995; opacity: .2; }
-.map-lakes-overlay path { fill: #2b6572; opacity: .76; }
+.map-water-overlay { fill: #244b56; opacity: .2; }
+.map-land-overlay path { fill: #9aa995; opacity: .08; }
+.map-lakes-overlay path { fill: #2b6572; opacity: .82; }
 
-.map-borders-overlay[data-detail="true"] .map-water-overlay { opacity: .58; }
-.map-borders-overlay[data-detail="true"] .map-land-overlay path { opacity: .34; }
+.map-borders-overlay[data-detail="true"] .map-water-overlay { opacity: .3; }
+.map-borders-overlay[data-detail="true"] .map-land-overlay path { opacity: .13; }
 .map-borders-overlay[data-detail="true"] .map-lakes-overlay path { opacity: .94; }
 
 .map-border-lines--country path {
