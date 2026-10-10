@@ -78,10 +78,12 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       svg.innerHTML = `<g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };
     map.on("load", drawBorders);
+    map.on("idle", drawBorders);
     map.on("move", drawBorders);
     map.on("resize", drawBorders);
+    window.setTimeout(drawBorders, 900);
     if (onPick) map.on("click", event => onPick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]));
-    return () => { map.off("load", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
+    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
   }, [onPick]);
 
   useEffect(() => {
