@@ -14,7 +14,7 @@ import type QrScanner from "qr-scanner";
 
 type Guess = { name: string; color: string; x: number; y: number };
 type QuizQuestion = { id: string; prompt: string; place_label: string; latitude: number; longitude: number; spotify_url: string; spotify_title: string | null; spotify_artist: string | null };
-type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; findPlace: () => void; save: () => void; useSelected: () => void };
+type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
 type AppMode = "host" | "player" | "admin";
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 type MapRef = { current: maplibregl.Map | null };
@@ -213,8 +213,11 @@ function OverlayMarker({ mapRef, point, className, label, color }: { mapRef: Map
   return <div ref={markerRef} className={`map-pin ${className}`} aria-hidden="true"><span>{label}</span></div>;
 }
 
-function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spotifyUrl, setSpotifyUrl, point, preview, status, selectedIds, setSelectedIds, findPlace, save, useSelected }: QuestionBankPanelProps) {
-  return <div className="question-bank"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>setSelectedIds(current=>event.target.checked ? [...current, question.id] : current.filter(id=>id !== question.id))} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I OMGÅNGEN ({selectedIds.length})</button></div>;
+function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spotifyUrl, setSpotifyUrl, point, setPoint, preview, status, selectedIds, setSelectedIds, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
+  const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>setSelectedIds(current=>event.target.checked ? [...current, question.id] : current.filter(id=>id !== question.id))} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I OMGÅNGEN ({selectedIds.length})</button></div>;
+  if (!showMap) return <div className="question-bank">{form}</div>;
+  const previewPoint = point ? toPercent(point.longitude, point.latitude) : defaultAnswer;
+  return <div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div></div></div>;
 }
 
 function RoomQrPanel({ roomCode }: { roomCode: string }) {
@@ -228,7 +231,7 @@ function RoomQrPanel({ roomCode }: { roomCode: string }) {
 }
 
 function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {
-  return <main className="shell shell--admin"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="admin-nav"><button className="ghost" onClick={onBack}>Spelledarvy</button><button className="ghost" onClick={onLogout}>Logga ut</button></div></header><section className="admin-content"><div className="eyebrow">ADMINVY</div><h1>Frågebank</h1><p className="muted">Skapa frågor med plats och Spotifylänk. Välj sedan vilka som ska användas i nästa omgång.</p><QuestionBankPanel {...bank} /></section></main>;
+  return <main className="shell shell--admin"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="admin-nav"><button className="ghost" onClick={onBack}>Spelledarvy</button><button className="ghost" onClick={onLogout}>Logga ut</button></div></header><section className="admin-content"><div className="eyebrow">ADMINVY</div><h1>Frågebank</h1><p className="muted">Skapa frågor med plats och Spotifylänk. Välj sedan vilka som ska användas i nästa omgång.</p><QuestionBankPanel {...bank} showMap /></section></main>;
 }
 
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
@@ -319,10 +322,22 @@ export default function Home() {
     const match = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/);
     if (!match) { window.setTimeout(() => setSpotifyPreview(null), 0); return; }
     const timer = window.setTimeout(() => {
-      void fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(questionSpotifyUrl.trim())}`)
-        .then(response => response.ok ? response.json() as Promise<{ title?: string; author_name?: string }> : Promise.reject(new Error("preview")))
-        .then(data => setSpotifyPreview({ title: data.title ?? "Okänd låt", artist: data.author_name ?? "Okänd artist" }))
-        .catch(() => setSpotifyPreview(null));
+      void (async () => {
+        try {
+          const response = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(questionSpotifyUrl.trim())}`);
+          if (!response.ok) throw new Error("preview");
+          const data = await response.json() as { title?: string; author_name?: string };
+          let artist = data.author_name?.trim() || "";
+          if (!artist || artist.toLowerCase() === "spotify" || artist.toLowerCase() === "okänd artist") {
+            const itunesResponse = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(data.title ?? "")}&entity=song&limit=1`);
+            if (itunesResponse.ok) {
+              const itunes = await itunesResponse.json() as { results?: Array<{ artistName?: string }> };
+              artist = itunes.results?.[0]?.artistName?.trim() || "";
+            }
+          }
+          setSpotifyPreview({ title: data.title ?? "Okänd låt", artist: artist || "Okänd artist" });
+        } catch { setSpotifyPreview(null); }
+      })();
     }, 350);
     return () => window.clearTimeout(timer);
   }, [questionSpotifyUrl]);
@@ -484,7 +499,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!questionBankRootRef.current) return;
-    questionBankRootRef.current.render(<><QuestionBankPanel questions={questions} prompt={questionPrompt} setPrompt={setQuestionPrompt} place={questionPlaceQuery} setPlace={setQuestionPlaceQuery} spotifyUrl={questionSpotifyUrl} setSpotifyUrl={setQuestionSpotifyUrl} point={questionPoint} preview={spotifyPreview} status={questionStatus} selectedIds={selectedQuestionIds} setSelectedIds={setSelectedQuestionIds} findPlace={() => void findQuestionPlace()} save={() => void saveQuestion()} useSelected={useSelectedQuestions} /><RoomQrPanel roomCode={roomCode} /></>);
+    questionBankRootRef.current.render(<><QuestionBankPanel questions={questions} prompt={questionPrompt} setPrompt={setQuestionPrompt} place={questionPlaceQuery} setPlace={setQuestionPlaceQuery} spotifyUrl={questionSpotifyUrl} setSpotifyUrl={setQuestionSpotifyUrl} point={questionPoint} setPoint={setQuestionPoint} preview={spotifyPreview} status={questionStatus} selectedIds={selectedQuestionIds} setSelectedIds={setSelectedQuestionIds} findPlace={() => void findQuestionPlace()} save={() => void saveQuestion()} useSelected={useSelectedQuestions} /><RoomQrPanel roomCode={roomCode} /></>);
   }, [questions, questionPrompt, questionPlaceQuery, questionSpotifyUrl, questionPoint, spotifyPreview, questionStatus, selectedQuestionIds]);
 
   const joinRoom = () => {
@@ -519,7 +534,7 @@ export default function Home() {
     setPlayers(current => current.map(player => ({ ...player, x: 45, y: 46 })));
   };
 
-  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
+  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
 
   if (mode !== "player" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && !user) return <AuthScreen onAuthenticated={setUser} />;
