@@ -96,6 +96,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       const statePaths = map.getZoom() >= 4.8
         ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
         : [];
+      svg.dataset.detail = map.getZoom() >= 3.2 ? "true" : "false";
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
       svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%"/><g class="map-land-overlay">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };

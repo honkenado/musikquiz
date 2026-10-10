@@ -80,6 +80,10 @@
 .map-land-overlay path { fill: #9aa995; opacity: .2; }
 .map-lakes-overlay path { fill: #2b6572; opacity: .76; }
 
+.map-borders-overlay[data-detail="true"] .map-water-overlay { opacity: .58; }
+.map-borders-overlay[data-detail="true"] .map-land-overlay path { opacity: .34; }
+.map-borders-overlay[data-detail="true"] .map-lakes-overlay path { opacity: .94; }
+
 .map-border-lines--country path {
   stroke: #c0d0a6;
   stroke-width: 1px;
@@ -91,3 +95,6 @@
   stroke-width: 1px;
   opacity: .7;
 }
+
+.map-borders-overlay[data-detail="true"] .map-border-lines--country path { stroke-width: 1.1px; opacity: .84; }
+.map-borders-overlay[data-detail="true"] .map-border-lines--state path { stroke-width: 1.05px; opacity: .82; }
