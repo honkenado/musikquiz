@@ -473,7 +473,12 @@ export default function Home() {
     if (!questionPrompt.trim() || !questionPoint || !questionSpotifyUrl.trim()) return;
     setQuestionStatus("SPARAR...");
     const { data: sessionData } = await supabase.auth.getSession();
-    const currentUser = sessionData.session?.user;
+    let currentSession = sessionData.session;
+    if (!currentSession) {
+      const refreshed = await supabase.auth.refreshSession();
+      currentSession = refreshed.data.session;
+    }
+    const currentUser = currentSession?.user;
     if (!currentUser) { setQuestionStatus("KUNDE INTE SPARA: LOGGA IN IGEN"); return; }
     const spotifyTrackId = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/)?.[1] ?? null;
     const { error } = await supabase.from("quiz_questions").insert({ owner_id: currentUser.id, prompt: questionPrompt.trim(), place_label: questionPlaceQuery.trim(), latitude: questionPoint.latitude, longitude: questionPoint.longitude, spotify_url: questionSpotifyUrl.trim(), spotify_track_id: spotifyTrackId, spotify_title: spotifyPreview?.title ?? null, spotify_artist: spotifyPreview?.artist ?? null });
