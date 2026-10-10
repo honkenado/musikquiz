@@ -330,9 +330,29 @@ export default function Home() {
   useEffect(() => {
     if (!['host', 'admin'].includes(mode) || !user) return;
     void supabase.from("quiz_questions").select("id,prompt,place_label,latitude,longitude,spotify_url,spotify_title,spotify_artist").order("created_at", { ascending: false }).then(({ data, error }) => {
-      if (!error && data) setQuestions(data as QuizQuestion[]);
+      if (error || !data) return;
+      const loaded = data as QuizQuestion[];
+      setQuestions(loaded);
+      if (mode === "host" && loaded.length && !activeQuestions.length) {
+        let selected = loaded;
+        try {
+          const stored = JSON.parse(window.localStorage.getItem(activeQuestionsStorageKey) ?? "[]") as QuizQuestion[];
+          const storedSelection = Array.isArray(stored) ? stored.filter(question => loaded.some(candidate => candidate.id === question.id)) : [];
+          if (storedSelection.length) selected = storedSelection;
+        } catch {
+          // Use the loaded question list when no local selection is available.
+        }
+        setActiveQuestions(selected);
+        setSelectedQuestionIds(selected.map(question => question.id));
+        const first = selected[0];
+        if (first) {
+          setAnswer(toPercent(first.longitude, first.latitude));
+          setAnswerLabel(first.place_label);
+          setAnswerQuery(first.place_label);
+        }
+      }
     });
-  }, [mode, user]);
+  }, [mode, user, activeQuestions.length]);
 
   useEffect(() => {
     if (mode !== "host" || !questions.length) return;
