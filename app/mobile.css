@@ -103,6 +103,15 @@
 .question-list span { min-width: 0; }
 .question-list strong, .question-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .question-list small { color: var(--muted); margin-top: 2px; font: 10px 'DM Mono', monospace; }
+.question-list { max-height: 540px; padding: 6px 10px 6px 0; }
+.question-list__item { padding: 12px 10px 12px 2px !important; border: 1px solid transparent; border-radius: 8px; }
+.question-list__item:hover { border-color: #64d7ff33; background: #64d7ff08; }
+.question-list__text { flex: 1; display: grid; gap: 5px; min-width: 0; }
+.question-list__track { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: baseline; }
+.question-list__track strong { color: var(--text); font-size: 14px; }
+.question-list__track small { color: var(--lime); margin: 0; text-align: right; }
+.question-list__prompt { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; line-height: 1.35; }
+.question-list__place { color: var(--cyan) !important; margin: 0 !important; }
 .shell--auth { display: grid; place-items: center; min-height: 100vh; }
 .auth-card { width: min(440px, calc(100% - 32px)); padding: 34px; border: 1px solid #64d7ff33; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0005; }
 .auth-card .brand { margin-bottom: 45px; }
@@ -215,6 +224,10 @@
 .final-podium-row strong { color: var(--muted); font: 12px 'DM Mono', monospace; }
 .final-podium-row b { color: var(--lime); font: 700 15px 'DM Mono', monospace; }
 .final-podium-row--1 { border-color: #d9ff7888; background: #d9ff7818; transform: scale(1.02); }
+.player-card--finished { max-width: 620px; }
+.player-card--finished h1 { margin-bottom: 12px; }
+.player-final-score { margin-bottom: 28px; }
+.player-final-score strong { color: var(--lime); }
 .tv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
 .tv-map .map-shell { aspect-ratio: 1.75; }
 .tv-scoreboard { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: #0d2028aa; }
@@ -252,4 +265,8 @@
 @media (max-width: 800px) {
   .question-editor-layout { grid-template-columns: 1fr; }
   .question-editor-map .map-shell { min-height: 260px; }
+  .player-card--finished { padding-top: 12vh; }
+  .player-card--finished .final-podium-row { grid-template-columns: 28px 10px minmax(0, 1fr) auto; gap: 9px; padding: 14px 12px; }
+  .question-list__track { display: block; }
+  .question-list__track small { text-align: left; margin-top: 4px; }
 }
