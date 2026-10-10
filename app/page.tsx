@@ -190,7 +190,8 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (map.loaded()) render(); else map.once("load", render);
   }, [reveal, guesses, selected]);
 
-  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta">
+  return <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
+    <div ref={containerRef} className="map map--real" aria-label="Interaktiv världskarta" />
     {selected && <div ref={selectedMarkerRef} className="map-pin map-pin--selected" aria-hidden="true"><span>DU</span></div>}
   </div>;
 }

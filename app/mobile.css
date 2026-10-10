@@ -4,7 +4,10 @@
 
 .map--real .maplibregl-canvas { outline: none; filter: none; }
 .map--real .maplibregl-marker { z-index: 5; }
-.map--real > .map-pin--selected { position: absolute; left: 0; top: 0; z-index: 6; pointer-events: none; }
+.map-shell { position: relative; overflow: hidden; border: 1px solid #35535a; border-radius: 12px; aspect-ratio: 1.78; background: #0b2630; cursor: crosshair; box-shadow: inset 0 0 80px #041217; }
+.map-shell > .map { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; border-radius: 0; aspect-ratio: auto; box-shadow: none; }
+.map-shell > .map-pin--selected { position: absolute; left: 0; top: 0; z-index: 6; pointer-events: none; }
+.map-shell--compact { margin-top: 18px; aspect-ratio: 1.22; }
 .map--real .maplibregl-ctrl-attrib { background: #081218cc; color: #8aa1a8; font: 9px 'DM Mono', monospace; }
 .map--real .maplibregl-ctrl-attrib a { color: #b7c9c4; }
 .map-pin { width: 18px; height: 18px; border-radius: 50% 50% 50% 0; background: var(--pin-color, var(--orange)); border: 2px solid #fff; transform: rotate(-45deg); box-shadow: 0 0 0 4px #ffffff26, 0 0 18px #0009; pointer-events: none; }
@@ -47,6 +50,12 @@
   .player-card h2 { font-size: 25px; }
 
   .player-card .map--compact {
+    flex: 1;
+    min-height: clamp(270px, 48vh, 500px);
+    aspect-ratio: auto;
+  }
+
+  .map-shell--compact {
     flex: 1;
     min-height: clamp(270px, 48vh, 500px);
     aspect-ratio: auto;
