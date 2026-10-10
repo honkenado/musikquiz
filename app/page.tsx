@@ -39,7 +39,17 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     bordersRef.current = bordersSvg;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.once("load", () => {
-      map.getStyle().layers?.filter(layer => layer.type === "symbol").forEach(layer => map.setLayoutProperty(layer.id, "visibility", "none"));
+      map.getStyle().layers?.forEach(layer => {
+        if (layer.type === "symbol") map.setLayoutProperty(layer.id, "visibility", "none");
+        if (layer.type === "fill" && /water|lake|ocean|sea/i.test(layer.id)) {
+          map.setPaintProperty(layer.id, "fill-color", "#16434d");
+          map.setPaintProperty(layer.id, "fill-opacity", 0.78);
+        }
+        if (layer.type === "line" && /water|river|stream|lake/i.test(layer.id)) {
+          map.setPaintProperty(layer.id, "line-color", "#4f9eaa");
+          map.setPaintProperty(layer.id, "line-opacity", 0.7);
+        }
+      });
       if (map.getLayer("boundary_2")) {
         map.setLayerZoomRange("boundary_2", 1, 24);
         map.setPaintProperty("boundary_2", "line-color", "#d9ff78");
@@ -72,8 +82,8 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       };
       const countryFeatures = Array.isArray((countryBorders as { features?: unknown[] }).features) ? (countryBorders as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
       const stateFeatures = Array.isArray((usStates as { features?: unknown[] }).features) ? (usStates as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
-      const paths = countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean);
-      const statePaths = map.getZoom() >= 2.8
+      const paths = map.getZoom() >= 2.75 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
+      const statePaths = map.getZoom() >= 4
         ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
         : [];
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
