@@ -98,14 +98,14 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       const zoom = map.getZoom();
       const paths = zoom >= 2.15 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
       const regionalPaths = zoom >= 3.3
-        ? regionalFeatures.filter(feature => feature.properties?.country !== "USA").map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean)
+        ? regionalFeatures.filter(feature => feature.properties?.country === "SWE").map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean)
         : [];
-      const statePaths = zoom >= 3.3
+      const statePaths = zoom >= 2.15
         ? regionalFeatures.filter(feature => feature.properties?.country === "USA").map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean)
         : [];
       svg.setAttribute("data-country-detail", zoom >= 2.15 ? "true" : "false");
       svg.setAttribute("data-regional-detail", zoom >= 3.3 ? "true" : "false");
-      svg.setAttribute("data-state-detail", zoom >= 3.3 ? "true" : "false");
+      svg.setAttribute("data-state-detail", zoom >= 2.15 ? "true" : "false");
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
       svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%" style="fill:#347b96;opacity:.92"/><g class="map-land-overlay" style="fill:#e6e6c4;opacity:.88">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay" style="fill:#347b96;opacity:.98">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country" style="stroke:#58645b;stroke-width:1px;opacity:.86">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--regional" style="stroke:#7b887b;stroke-width:.7px;opacity:.62">${regionalPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state" style="stroke:#6f7d70;stroke-width:.8px;opacity:.68">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };
