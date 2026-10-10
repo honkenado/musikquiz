@@ -1,0 +1,51 @@
+.shell--player {
+  min-height: 100dvh;
+}
+
+.map--compact {
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pin--selected {
+  width: 23px;
+  height: 23px;
+  background: var(--orange);
+  box-shadow: 0 0 0 7px #ff6b4a38, 0 0 26px #ff6b4a99;
+  animation: pin-pulse 1.7s ease-in-out infinite;
+}
+
+.pin--selected span {
+  color: var(--orange);
+  font-weight: 700;
+}
+
+@keyframes pin-pulse {
+  0%, 100% { box-shadow: 0 0 0 7px #ff6b4a38, 0 0 26px #ff6b4a66; }
+  50% { box-shadow: 0 0 0 12px #ff6b4a14, 0 0 35px #ff6b4acc; }
+}
+
+@media (max-width: 800px) {
+  .player-card {
+    min-height: calc(100dvh - 60px);
+    padding: 24px 16px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .player-card h2 { font-size: 25px; }
+
+  .player-card .map--compact {
+    flex: 1;
+    min-height: clamp(270px, 48vh, 500px);
+    aspect-ratio: auto;
+  }
+
+  .player-actions {
+    position: sticky;
+    bottom: 0;
+    padding-top: 13px;
+    background: linear-gradient(var(--bg) 0%, var(--bg) 70%);
+  }
+
+  .player-actions .button { min-height: 48px; padding-inline: 18px; }
+}
