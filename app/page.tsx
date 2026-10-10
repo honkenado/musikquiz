@@ -99,7 +99,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         : [];
       svg.setAttribute("data-detail", map.getZoom() >= 3.2 ? "true" : "false");
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
-      svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%"/><g class="map-land-overlay">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
+      svg.innerHTML = `<rect class="map-water-overlay" width="100%" height="100%" style="fill:#347b96;opacity:.92"/><g class="map-land-overlay" style="fill:#e6e6c4;opacity:.88">${landPaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-lakes-overlay" style="fill:#347b96;opacity:.98">${lakePaths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--country" style="stroke:#58645b;stroke-width:1px;opacity:.86">${paths.map(path => `<path d="${path}"/>`).join("")}</g><g class="map-border-lines map-border-lines--state" style="stroke:#68756a;stroke-width:.9px;opacity:.72">${statePaths.map(path => `<path d="${path}"/>`).join("")}</g>`;
     };
     map.on("load", drawBorders);
     map.on("idle", drawBorders);
