@@ -40,6 +40,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const onPickRef = useRef(onPick);
+  const selectedMarkerRef = useRef<HTMLDivElement>(null);
   const toLngLat = (point: { x: number; y: number }) => [point.x * 3.6 - 180, 90 - point.y * 1.8] as [number, number];
   const toPercent = (lng: number, lat: number) => ({ x: Math.round((lng + 180) / 3.6), y: Math.round((90 - lat) / 1.8) });
 
@@ -145,6 +146,28 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
 
   useEffect(() => {
     const map = mapRef.current;
+    const marker = selectedMarkerRef.current;
+    if (!map || !marker || !selected) return;
+    const positionMarker = () => {
+      const point = map.project(toLngLat(selected));
+      marker.style.left = `${point.x}px`;
+      marker.style.top = `${point.y}px`;
+    };
+    positionMarker();
+    map.on("load", positionMarker);
+    map.on("move", positionMarker);
+    map.on("resize", positionMarker);
+    map.on("zoom", positionMarker);
+    return () => {
+      map.off("load", positionMarker);
+      map.off("move", positionMarker);
+      map.off("resize", positionMarker);
+      map.off("zoom", positionMarker);
+    };
+  }, [selected]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) return;
     const answer = { x: 42, y: 45 };
     const render = () => {
@@ -157,7 +180,6 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
         element.innerHTML = `<span>${label}</span>`;
         markersRef.current.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(toLngLat(point)).addTo(map));
       };
-      if (selected) addMarker(selected, "map-pin--selected", "DU");
       if (reveal >= 1) guesses.forEach(guess => addMarker(guess, "map-pin--player", guess.name, guess.color));
       if (reveal >= 2) addMarker(answer, "map-pin--answer", "FACIT");
       const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answer)] }, properties: {} })) : [] } as RouteData;
@@ -168,7 +190,9 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (map.loaded()) render(); else map.once("load", render);
   }, [reveal, guesses, selected]);
 
-  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta" />;
+  return <div ref={containerRef} className={`map map--real ${compact ? "map--compact" : ""}`} aria-label="Interaktiv världskarta">
+    {selected && <div ref={selectedMarkerRef} className="map-pin map-pin--selected" aria-hidden="true"><span>DU</span></div>}
+  </div>;
 }
 
 export default function Home() {
