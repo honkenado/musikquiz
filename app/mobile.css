@@ -87,6 +87,28 @@
   stroke-linecap: round;
 }
 
+.question-bank { margin-top: 18px; padding: 13px; border: 1px solid #64d7ff33; border-radius: 10px; background: #0d1c22; }
+.question-bank > strong { display: block; margin: 5px 0 9px; }
+.question-bank input { width: 100%; margin: 5px 0; }
+.question-place { display: grid; grid-template-columns: 1fr auto; gap: 6px; align-items: center; }
+.question-place .button { padding: 10px 11px; }
+.question-bank .button--wide { margin-top: 7px; }
+.question-bank > small { display: block; color: var(--lime); margin-top: 7px; font: 10px 'DM Mono', monospace; }
+.spotify-preview { color: #64d7ff !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.question-list { display: grid; gap: 6px; max-height: 210px; overflow: auto; margin: 12px 0 4px; padding-top: 8px; border-top: 1px solid #ffffff12; }
+.question-list label { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; border-bottom: 1px solid #ffffff0c; cursor: pointer; }
+.question-list label input { width: auto; margin: 2px 0 0; accent-color: var(--lime); }
+.question-list span { min-width: 0; }
+.question-list strong, .question-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.question-list small { color: var(--muted); margin-top: 2px; font: 10px 'DM Mono', monospace; }
+.shell--auth { display: grid; place-items: center; min-height: 100vh; }
+.auth-card { width: min(440px, calc(100% - 32px)); padding: 34px; border: 1px solid #64d7ff33; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0005; }
+.auth-card .brand { margin-bottom: 45px; }
+.auth-card h1 { margin: 12px 0; }
+.auth-card input { display: block; width: 100%; margin: 10px 0; }
+.auth-status { display: block; color: var(--orange); margin-top: 12px; line-height: 1.5; }
+.auth-toggle { display: block; width: 100%; margin-top: 16px; }
+
 .map-water-overlay { fill: #347b96; opacity: .92; }
 .map-land-overlay path { fill: #e6e6c4; opacity: .88; }
 .map-lakes-overlay path { fill: #347b96; opacity: .98; }
