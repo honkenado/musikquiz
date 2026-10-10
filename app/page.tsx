@@ -41,14 +41,6 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     map.once("load", () => {
       map.getStyle().layers?.forEach(layer => {
         if (layer.type === "symbol") map.setLayoutProperty(layer.id, "visibility", "none");
-        if (layer.type === "fill" && /water|lake|ocean|sea/i.test(layer.id)) {
-          map.setPaintProperty(layer.id, "fill-color", "#16434d");
-          map.setPaintProperty(layer.id, "fill-opacity", 0.78);
-        }
-        if (layer.type === "line" && /water|river|stream|lake/i.test(layer.id)) {
-          map.setPaintProperty(layer.id, "line-color", "#4f9eaa");
-          map.setPaintProperty(layer.id, "line-opacity", 0.7);
-        }
       });
       if (map.getLayer("boundary_2")) {
         map.setLayerZoomRange("boundary_2", 1, 24);
@@ -68,16 +60,6 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       const svg = bordersRef.current;
       const container = containerRef.current;
       if (!svg || !container) return;
-      map.getStyle().layers?.forEach(layer => {
-        if (layer.type === "fill" && /water|lake|ocean|sea/i.test(layer.id)) {
-          map.setPaintProperty(layer.id, "fill-color", "#1a5360");
-          map.setPaintProperty(layer.id, "fill-opacity", 0.96);
-        }
-        if (layer.type === "line" && /water|river|stream|lake/i.test(layer.id)) {
-          map.setPaintProperty(layer.id, "line-color", "#62aeb8");
-          map.setPaintProperty(layer.id, "line-opacity", 0.82);
-        }
-      });
       const project = (coordinate: [number, number]) => {
         const point = map.project(coordinate);
         return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
