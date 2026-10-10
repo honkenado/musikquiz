@@ -12,6 +12,7 @@ import type QrScanner from "qr-scanner";
 
 type Guess = { name: string; color: string; x: number; y: number };
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
+type MapRef = { current: maplibregl.Map | null };
 const playerColors = ["#ff6b4a", "#64d7ff", "#f5c451", "#b995ff", "#72e4ad", "#ff9ee8", "#8fb8ff", "#ffb86b"];
 const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
@@ -49,9 +50,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
   const containerRef = useRef<HTMLDivElement>(null);
   const bordersRef = useRef<SVGSVGElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
   const onPickRef = useRef(onPick);
-  const selectedMarkerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -150,17 +149,42 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       if (pick) pick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]);
     };
     map.on("click", handleClick);
-    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); map.off("click", handleClick); markersRef.current.forEach(marker => marker.remove()); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
+    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); map.off("click", handleClick); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
-    const marker = selectedMarkerRef.current;
-    if (!map || !marker || !selected) return;
+    if (!map) return;
+    const render = () => {
+      const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answer)] }, properties: {} })) : [] } as RouteData;
+      if (map.getSource("routes")) (map.getSource("routes") as maplibregl.GeoJSONSource).setData(routeData);
+      else { map.addSource("routes", { type: "geojson", data: routeData }); map.addLayer({ id: "routes", type: "line", source: "routes", paint: { "line-color": "#d9ff78", "line-width": 1.5, "line-opacity": 0.7, "line-dasharray": [2, 2] } }); }
+      if (reveal >= 3) { const bounds = new maplibregl.LngLatBounds(toLngLat(answer), toLngLat(answer)); guesses.forEach(guess => bounds.extend(toLngLat(guess))); map.fitBounds(bounds, { padding: 80, maxZoom: 3.2, duration: 700 }); }
+    };
+    if (map.loaded()) render(); else map.once("load", render);
+  }, [reveal, guesses, selected]);
+
+  return <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
+    <div ref={containerRef} className="map map--real" aria-label="Interaktiv världskarta" />
+    {selected && <OverlayMarker mapRef={mapRef} point={selected} className="map-pin--selected" label="DU" />}
+    {reveal >= 1 && guesses.map(guess => <OverlayMarker key={guess.name} mapRef={mapRef} point={guess} className="map-pin--player" label={guess.name} color={guess.color} />)}
+    {reveal >= 2 && <OverlayMarker mapRef={mapRef} point={answer} className="map-pin--answer" label="FACIT" />}
+  </div>;
+}
+
+function OverlayMarker({ mapRef, point, className, label, color }: { mapRef: MapRef; point: { x: number; y: number }; className: string; label: string; color?: string }) {
+  const markerRef = useRef<HTMLDivElement>(null);
+  const { x, y } = point;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const marker = markerRef.current;
+    if (!map || !marker) return;
+    if (color) marker.style.setProperty("--pin-color", color);
     const positionMarker = () => {
-      const point = map.project(toLngLat(selected));
-      marker.style.left = `${point.x}px`;
-      marker.style.top = `${point.y}px`;
+      const projected = map.project(toLngLat({ x, y }));
+      marker.style.left = `${projected.x}px`;
+      marker.style.top = `${projected.y}px`;
     };
     positionMarker();
     map.on("load", positionMarker);
@@ -173,36 +197,9 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       map.off("resize", positionMarker);
       map.off("zoom", positionMarker);
     };
-  }, [selected]);
+  }, [color, mapRef, x, y]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const answer = { x: 42, y: 45 };
-    const render = () => {
-      markersRef.current.forEach(marker => marker.remove());
-      markersRef.current = [];
-      const addMarker = (point: { x: number; y: number }, className: string, label: string, color?: string) => {
-        const element = document.createElement("div");
-        element.className = `map-pin ${className}`;
-        if (color) element.style.setProperty("--pin-color", color);
-        element.innerHTML = `<span>${label}</span>`;
-        markersRef.current.push(new maplibregl.Marker({ element, anchor: "bottom" }).setLngLat(toLngLat(point)).addTo(map));
-      };
-      if (reveal >= 1) guesses.forEach(guess => addMarker(guess, "map-pin--player", guess.name, guess.color));
-      if (reveal >= 2) addMarker(answer, "map-pin--answer", "FACIT");
-      const routeData = { type: "FeatureCollection", features: reveal >= 3 ? guesses.map(guess => ({ type: "Feature", geometry: { type: "LineString", coordinates: [toLngLat(guess), toLngLat(answer)] }, properties: {} })) : [] } as RouteData;
-      if (map.getSource("routes")) (map.getSource("routes") as maplibregl.GeoJSONSource).setData(routeData);
-      else { map.addSource("routes", { type: "geojson", data: routeData }); map.addLayer({ id: "routes", type: "line", source: "routes", paint: { "line-color": "#d9ff78", "line-width": 1.5, "line-opacity": 0.7, "line-dasharray": [2, 2] } }); }
-      if (reveal >= 3) { const bounds = new maplibregl.LngLatBounds(toLngLat(answer), toLngLat(answer)); guesses.forEach(guess => bounds.extend(toLngLat(guess))); map.fitBounds(bounds, { padding: 80, maxZoom: 3.2, duration: 700 }); }
-    };
-    if (map.loaded()) render(); else map.once("load", render);
-  }, [reveal, guesses, selected]);
-
-  return <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
-    <div ref={containerRef} className="map map--real" aria-label="Interaktiv världskarta" />
-    {selected && <div ref={selectedMarkerRef} className="map-pin map-pin--selected" aria-hidden="true"><span>DU</span></div>}
-  </div>;
+  return <div ref={markerRef} className={`map-pin ${className}`} aria-hidden="true"><span>{label}</span></div>;
 }
 
 export default function Home() {
