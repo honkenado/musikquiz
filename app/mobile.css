@@ -156,6 +156,12 @@
 .admin-content .question-bank input { padding: 12px; }
 .question-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr); gap: 24px; align-items: start; }
 .question-editor-form { min-width: 0; }
+.question-editor-form .field-label { display: block; margin-top: 12px; color: var(--muted); font: 10px 'DM Mono', monospace; letter-spacing: .12em; }
+.question-editor-form select { width: 100%; margin: 6px 0 10px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: #eef0ed; color: #132027; font: inherit; }
+.question-image { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 8px; object-fit: cover; }
+.question-image--host { width: min(320px, 100%); max-height: 150px; margin-top: 12px; }
+.question-image--player { width: min(460px, 100%); max-height: 220px; margin: 16px auto; }
+.question-image--tv { width: min(520px, 100%); max-height: 240px; margin: 18px auto 0; }
 .question-editor-map { min-width: 0; padding: 16px; border: 1px solid #64d7ff33; border-radius: 10px; background: #64d7ff08; }
 .question-editor-map .muted { margin: 8px 0 12px; font-size: 12px; }
 .question-editor-map .map-shell { aspect-ratio: 1.35; min-height: 320px; }
