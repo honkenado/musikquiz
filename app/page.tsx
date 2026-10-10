@@ -70,6 +70,28 @@ const spotifyTrackUri = (url: string) => {
   return id ? `spotify:track:${id}` : null;
 };
 const toBase64Url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+type SpotifyToken = { accessToken?: string; refreshToken?: string; expiresAt?: number };
+const readSpotifyToken = (): SpotifyToken | null => {
+  if (typeof window === "undefined") return null;
+  const stored = window.localStorage.getItem(spotifyTokenStorageKey) ?? window.sessionStorage.getItem(spotifyTokenStorageKey);
+  if (!stored) return null;
+  try { return JSON.parse(stored) as SpotifyToken; } catch { return null; }
+};
+const storeSpotifyToken = (token: SpotifyToken) => {
+  window.localStorage.setItem(spotifyTokenStorageKey, JSON.stringify(token));
+  window.sessionStorage.setItem(spotifyTokenStorageKey, JSON.stringify(token));
+};
+const refreshSpotifyAccessToken = async (): Promise<string | null> => {
+  const token = readSpotifyToken();
+  if (!token) return null;
+  if (token.accessToken && (token.expiresAt ?? 0) > Date.now() + 60_000) return token.accessToken;
+  if (!token.refreshToken || !spotifyClientId) return null;
+  const response = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: spotifyClientId, grant_type: "refresh_token", refresh_token: token.refreshToken }) });
+  const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!response.ok || !data.access_token) return null;
+  storeSpotifyToken({ accessToken: data.access_token, refreshToken: data.refresh_token ?? token.refreshToken, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
+  return data.access_token;
+};
 
 function Map({ reveal, guesses, answer, onPick, selected, compact = false, showAnswer = false }: { reveal: number; guesses: Guess[]; answer: { x: number; y: number }; onPick?: (x: number, y: number) => void; selected?: { x: number; y: number }; compact?: boolean; showAnswer?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -261,12 +283,15 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
   };
   const removeCategory = (id: string) => setOrderItems(current => current.filter(item => item.id !== id));
   useEffect(() => {
-    const stored = window.sessionStorage.getItem(spotifyTokenStorageKey);
+    const stored = readSpotifyToken();
     setSpotifyConnected(Boolean(stored));
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const returnedState = params.get("state");
-    if (!code) return;
+    if (!code) {
+      if (params.get("spotify") === "connect") void connectSpotify();
+      return;
+    }
     if (!returnedState || returnedState !== window.sessionStorage.getItem("musikquiz-spotify-state")) {
       setPlaylistStatus("Spotify-inloggningen kunde inte verifieras.");
       return;
@@ -280,7 +305,7 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
     }).then(async response => {
       const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
       if (!response.ok || !data.access_token) throw new Error("Spotify kunde inte godkänna anslutningen.");
-      window.sessionStorage.setItem(spotifyTokenStorageKey, JSON.stringify({ accessToken: data.access_token, refreshToken: data.refresh_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }));
+      storeSpotifyToken({ accessToken: data.access_token, refreshToken: data.refresh_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 });
       setSpotifyConnected(true);
       setPlaylistStatus("Spotify är anslutet. Klicka på knappen igen för att skapa spellistan.");
       window.history.replaceState(null, "", window.location.pathname);
@@ -297,21 +322,12 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
     const redirectUri = window.location.href.split("?")[0];
     window.sessionStorage.setItem("musikquiz-spotify-verifier", verifier);
     window.sessionStorage.setItem("musikquiz-spotify-state", state);
-    const params = new URLSearchParams({ response_type: "code", client_id: spotifyClientId, scope: "playlist-modify-private", redirect_uri: redirectUri, state, code_challenge_method: "S256", code_challenge: challenge });
+    const params = new URLSearchParams({ response_type: "code", client_id: spotifyClientId, scope: "playlist-modify-private user-read-playback-state user-modify-playback-state", redirect_uri: redirectUri, state, show_dialog: "true", code_challenge_method: "S256", code_challenge: challenge });
     window.location.assign(`https://accounts.spotify.com/authorize?${params.toString()}`);
   };
 
   const getSpotifyAccessToken = async () => {
-    const stored = window.sessionStorage.getItem(spotifyTokenStorageKey);
-    if (!stored) return null;
-    const token = JSON.parse(stored) as { accessToken?: string; refreshToken?: string; expiresAt?: number };
-    if (token.accessToken && (token.expiresAt ?? 0) > Date.now() + 60_000) return token.accessToken;
-    if (!token.refreshToken || !spotifyClientId) return null;
-    const response = await fetch("https://accounts.spotify.com/api/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: spotifyClientId, grant_type: "refresh_token", refresh_token: token.refreshToken }) });
-    const data = await response.json() as { access_token?: string; refresh_token?: string; expires_in?: number };
-    if (!response.ok || !data.access_token) return null;
-    window.sessionStorage.setItem(spotifyTokenStorageKey, JSON.stringify({ accessToken: data.access_token, refreshToken: data.refresh_token ?? token.refreshToken, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }));
-    return data.access_token;
+    return refreshSpotifyAccessToken();
   };
 
   const createSpotifyPlaylist = async () => {
@@ -350,7 +366,43 @@ function HostSessionPanel({ started, onStart }: { started: boolean; onStart: () 
       const tvWindow = window.open(`${window.location.origin}/?tv=1`, "musikquiz-tv", "popup=yes,width=1600,height=1000");
       if (tvWindow) tvWindow.focus();
     };
-  return <div className="host-session-panel"><div className="eyebrow">TV-LÄGE</div><p className="muted">Öppna TV-fönstret för rumskod och QR-kod.</p><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><button className="button button--outline button--wide" disabled={started} onClick={onStart}>{started ? "QUIZET ÄR STARTAT" : "STARTA QUIZ"}</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a></div>;
+  return <div className="host-session-panel"><div className="eyebrow">TV-LÄGE</div><p className="muted">Öppna TV-fönstret för rumskod och QR-kod.</p><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><button className="button button--outline button--wide" disabled={started} onClick={onStart}>{started ? "QUIZET ÄR STARTAT" : "STARTA QUIZ"}</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><SpotifyControlPanel /></div>;
+}
+
+function SpotifyControlPanel() {
+  const [connected, setConnected] = useState(false);
+  const [track, setTrack] = useState<{ title: string; artist: string; playing: boolean; device: string } | null>(null);
+  const [status, setStatus] = useState("");
+  const openConnect = () => { window.location.assign("/admin?spotify=connect"); };
+  const loadPlayback = async () => {
+    const accessToken = await refreshSpotifyAccessToken();
+    if (!accessToken) { setConnected(false); return; }
+    setConnected(true);
+    const response = await fetch("https://api.spotify.com/v1/me/player", { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (response.status === 204) { setTrack(null); return; }
+    if (!response.ok) { setConnected(false); setStatus("Spotify behöver kopplas om med uppspelningsbehörighet."); return; }
+    const data = await response.json() as { is_playing?: boolean; device?: { name?: string }; item?: { name?: string; artists?: Array<{ name?: string }> } };
+    if (!data.item) { setTrack(null); return; }
+    setTrack({ title: data.item.name ?? "Okänd låt", artist: data.item.artists?.map(artist => artist.name).filter(Boolean).join(", ") || "Okänd artist", playing: Boolean(data.is_playing), device: data.device?.name ?? "Spotify" });
+  };
+  useEffect(() => {
+    setConnected(Boolean(readSpotifyToken()));
+    void loadPlayback();
+    const timer = window.setInterval(() => void loadPlayback(), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const control = async (action: "play" | "pause" | "next" | "previous") => {
+    const accessToken = await refreshSpotifyAccessToken();
+    if (!accessToken) { setConnected(false); setStatus("Spotifyanslutningen saknas. Koppla Spotify igen."); return; }
+    const method = action === "play" || action === "pause" ? "PUT" : "POST";
+    const endpoint = action === "play" ? "play" : action === "pause" ? "pause" : action;
+    const response = await fetch(`https://api.spotify.com/v1/me/player/${endpoint}`, { method, headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) { setStatus("Spotify kunde inte ändra uppspelningen."); return; }
+    setStatus("");
+    await loadPlayback();
+  };
+  if (!connected) return <div className="spotify-control spotify-control--disconnected"><div className="eyebrow">SPOTIFY</div><p className="muted">Styr musiken från spelledarvyn.</p><button className="button button--outline button--wide" onClick={openConnect}>KOPPLA SPOTIFY</button></div>;
+  return <div className="spotify-control"><div className="eyebrow">SPOTIFY <strong>ANSLUTEN</strong></div>{track ? <><div className="spotify-control__track"><strong>{track.title}</strong><small>{track.artist}</small><small>{track.device}</small></div><div className="spotify-control__actions"><button aria-label="Föregående låt" onClick={() => void control("previous")}>◀◀</button><button aria-label={track.playing ? "Pausa" : "Spela"} onClick={() => void control(track.playing ? "pause" : "play")}>{track.playing ? "Ⅱ" : "▶"}</button><button aria-label="Nästa låt" onClick={() => void control("next")}>▶▶</button></div></> : <p className="muted">Ingen aktiv låt just nu.</p>}{status && <small className="playlist-status">{status}</small>}</div>;
 }
 
 function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {

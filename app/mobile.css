@@ -124,6 +124,15 @@
 .admin-link { text-decoration: none; margin-top: 8px; }
 .host-session-panel { margin-top: 22px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #0d2028aa; }
 .host-session-panel p { margin: 8px 0 12px; font-size: 12px; line-height: 1.45; }
+.spotify-control { margin-top: 16px; padding-top: 16px; border-top: 1px solid #ffffff12; }
+.spotify-control .eyebrow strong { color: var(--lime); }
+.spotify-control__track { display: grid; gap: 3px; margin: 12px 0; min-width: 0; }
+.spotify-control__track strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.spotify-control__track small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 10px 'DM Mono', monospace; }
+.spotify-control__actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.spotify-control__actions button { min-height: 34px; border: 1px solid var(--line); border-radius: 6px; background: #0d2028; color: var(--text); cursor: pointer; }
+.spotify-control__actions button:nth-child(2) { color: var(--lime); border-color: #d9ff7855; }
+.spotify-control--disconnected .button { margin-top: 10px; }
 .qr-open-button { margin-top: 8px; }
 .qr-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 20px; background: #041217cc; }
 .qr-modal__card { width: min(380px, 100%); display: grid; justify-items: center; gap: 14px; padding: 28px; text-align: center; border: 1px solid #d9ff7855; border-radius: 14px; background: #0d1c22; box-shadow: 0 18px 70px #0009; }
