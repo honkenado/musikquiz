@@ -221,13 +221,17 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
 }
 
 function RoomQrPanel({ roomCode }: { roomCode: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [open, setOpen] = useState(false);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [open, setOpen] = useState(false);
+    const openTvWindow = () => {
+      const tvWindow = window.open(`${window.location.origin}/?tv=1`, "musikquiz-tv", "popup=yes,width=1600,height=1000");
+      if (tvWindow) tvWindow.focus();
+    };
   useEffect(() => {
     if (!open || !canvasRef.current) return;
     void import("qrcode").then(QRCode => { if (canvasRef.current) void QRCode.toCanvas(canvasRef.current, `${window.location.origin}/?room=${encodeURIComponent(roomCode)}`, { width: 260, margin: 2, color: { dark: "#081218", light: "#e6e6c4" } }); });
   }, [open, roomCode]);
-  return <><a className="button button--primary button--wide tv-open-button" href="/?tv=1" target="_blank" rel="noreferrer">SKICKA TILL TV ↗</a><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><button className="button button--outline button--wide qr-open-button" onClick={()=>setOpen(true)}>VISA QR-KOD FÖR RUMMET</button>{open && <div className="qr-modal" role="dialog" aria-modal="true" aria-label="QR-kod för rummet"><div className="qr-modal__card"><div className="eyebrow">SKANNA FÖR ATT DELTA</div><h2>Rum {roomCode}</h2><canvas ref={canvasRef} /><p className="muted">Spelarna skannar koden med mobilkameran.</p><button className="button button--outline" onClick={()=>setOpen(false)}>STÄNG</button></div></div>}</>;
+  return <><button className="button button--primary button--wide tv-open-button" onClick={openTvWindow}>SKICKA TILL TV ↗</button><a className="button button--outline button--wide admin-link" href="/admin">ÖPPNA ADMINVY</a><button className="button button--outline button--wide qr-open-button" onClick={()=>setOpen(true)}>VISA QR-KOD FÖR RUMMET</button>{open && <div className="qr-modal" role="dialog" aria-modal="true" aria-label="QR-kod för rummet"><div className="qr-modal__card"><div className="eyebrow">SKANNA FÖR ATT DELTA</div><h2>Rum {roomCode}</h2><canvas ref={canvasRef} /><p className="muted">Spelarna skannar koden med mobilkameran.</p><button className="button button--outline" onClick={()=>setOpen(false)}>STÄNG</button></div></div>}</>;
 }
 
 function AdminView({ bank, onBack, onLogout }: { bank: QuestionBankPanelProps; onBack: () => void; onLogout: () => void }) {
@@ -423,7 +427,7 @@ export default function Home() {
       .subscribe(status => {
         if (status === "SUBSCRIBED") {
           setConnectionStatus("ANSLUTEN");
-          if (mode === "player") void channel.send({ type: "broadcast", event: "room_request", payload: { sessionId } });
+          if (mode === "player" || mode === "tv") void channel.send({ type: "broadcast", event: "room_request", payload: { sessionId } });
           else if (mode === "host") void channel.send({ type: "broadcast", event: "room_state", payload: { ...roomStateRef.current, source: "host" } });
         } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           setConnectionStatus("OFFLINE");
