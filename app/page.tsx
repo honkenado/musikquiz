@@ -13,7 +13,8 @@ import type QrScanner from "qr-scanner";
 
 type Guess = { name: string; color: string; x: number; y: number; score?: number };
 type QuizQuestion = { id: string; prompt: string; place_label: string; latitude: number; longitude: number; spotify_url: string; spotify_title: string | null; spotify_artist: string | null };
-type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
+type QuizOrderItem = { type: "question"; id: string } | { type: "category"; id: string; title: string };
+type QuestionBankPanelProps = { questions: QuizQuestion[]; prompt: string; setPrompt: (value: string) => void; place: string; setPlace: (value: string) => void; spotifyUrl: string; setSpotifyUrl: (value: string) => void; point: { latitude: number; longitude: number } | null; setPoint: (value: { latitude: number; longitude: number } | null) => void; preview: { title: string; artist: string } | null; status: string; selectedIds: string[]; setSelectedIds: Dispatch<SetStateAction<string[]>>; orderItems: QuizOrderItem[]; setOrderItems: Dispatch<SetStateAction<QuizOrderItem[]>>; findPlace: () => void; save: () => void; useSelected: () => void; showMap?: boolean };
 type AppMode = "host" | "player" | "admin" | "tv";
 type RouteData = { type: "FeatureCollection"; features: Array<{ type: "Feature"; geometry: { type: "LineString"; coordinates: Array<[number, number]> }; properties: Record<string, never> }> };
 type MapRef = { current: maplibregl.Map | null };
@@ -22,6 +23,7 @@ const initialPlayers: Guess[] = [];
 const roomChannelName = "musikquiz-room-nord-7k";
 const normalizeRoomCode = (value: string) => value.replace(/\s+/g, "").toUpperCase();
 const activeQuestionsStorageKey = "musikquiz-active-questions";
+const activeQuizOrderStorageKey = "musikquiz-quiz-order";
 const spotifyClientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID ?? "989f0e0f03a84ec68946b5fbd43dcef1";
 const spotifyTokenStorageKey = "musikquiz-spotify-token";
 const generateRoomCode = () => {
@@ -231,14 +233,32 @@ function OverlayMarker({ mapRef, point, className, label, color }: { mapRef: Map
   return <div ref={markerRef} className={`map-pin ${className}`} aria-hidden="true"><span>{label}</span></div>;
 }
 
-function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spotifyUrl, setSpotifyUrl, point, setPoint, preview, status, selectedIds, setSelectedIds, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
+function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spotifyUrl, setSpotifyUrl, point, setPoint, preview, status, selectedIds, setSelectedIds, orderItems, setOrderItems, findPlace, save, useSelected, showMap = false }: QuestionBankPanelProps) {
   const allSelected = questions.length > 0 && selectedIds.length === questions.length;
-  const orderedSelectedQuestions = selectedIds.map(id => questions.find(question => question.id === id)).filter((question): question is QuizQuestion => Boolean(question));
+  const orderedItems = orderItems.filter(item => item.type === "category" || selectedIds.includes(item.id));
+  const orderedSelectedQuestions = orderedItems.filter((item): item is Extract<QuizOrderItem, { type: "question" }> => item.type === "question").map(item => questions.find(question => question.id === item.id)).filter((question): question is QuizQuestion => Boolean(question));
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [categoryTitle, setCategoryTitle] = useState("");
   const [spotifyConnected, setSpotifyConnected] = useState(false);
   const [playlistStatus, setPlaylistStatus] = useState("");
   const [playlistUrl, setPlaylistUrl] = useState("");
+  useEffect(() => {
+    setOrderItems(current => {
+      const kept = current.filter(item => item.type === "category" || selectedIds.includes(item.id));
+      const existingQuestionIds = new Set(kept.filter(item => item.type === "question").map(item => item.id));
+      return [...kept, ...selectedIds.filter(id => !existingQuestionIds.has(id)).map(id => ({ type: "question" as const, id }))];
+    });
+  }, [selectedIds, setOrderItems]);
   const toggleAll = () => setSelectedIds(allSelected ? [] : questions.map(question => question.id));
+  const toggleQuestion = (id: string, checked: boolean) => {
+    setSelectedIds(current => checked ? [...current, id] : current.filter(selectedId => selectedId !== id));
+  };
+  const addCategory = () => {
+    const title = categoryTitle.trim();
+    if (!title) return;
+    setOrderItems(current => [...current, { type: "category", id: crypto.randomUUID(), title }]);
+    setCategoryTitle("");
+  };
   useEffect(() => {
     const stored = window.sessionStorage.getItem(spotifyTokenStorageKey);
     setSpotifyConnected(Boolean(stored));
@@ -315,12 +335,12 @@ function QuestionBankPanel({ questions, prompt, setPrompt, place, setPlace, spot
 
   const moveQuestion = (sourceId: string, targetId: string) => {
     if (sourceId === targetId) return;
-    setSelectedIds(current => { const next = [...current]; const sourceIndex = next.indexOf(sourceId); const targetIndex = next.indexOf(targetId); if (sourceIndex < 0 || targetIndex < 0) return current; next.splice(sourceIndex, 1); next.splice(targetIndex, 0, sourceId); return next; });
+    setOrderItems(current => { const next = [...current]; const sourceIndex = next.findIndex(item => item.id === sourceId); const targetIndex = next.findIndex(item => item.id === targetId); if (sourceIndex < 0 || targetIndex < 0) return current; const [moved] = next.splice(sourceIndex, 1); next.splice(targetIndex, 0, moved); return next; });
   };
-  const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list__toolbar"><span>{questions.length} frågor · {selectedIds.length} valda</span><button className="button button--outline" disabled={!questions.length} onClick={toggleAll}>{allSelected ? "AVMARKERA ALLA" : "VÄLJ ALLA"}</button></div><div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>setSelectedIds(current=>event.target.checked ? [...current, question.id] : current.filter(id => id !== question.id))} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I QUIZET ({selectedIds.length})</button></div>;
+  const form = <div className="question-editor-form"><div className="eyebrow">FRÅGEBANK</div><strong>Ny fråga</strong><input value={prompt} onChange={e=>setPrompt(e.target.value)} placeholder="Skriv frågan" /><div className="question-place"><input value={place} onChange={e=>setPlace(e.target.value)} placeholder="Plats, t.ex. New York" /><button className="button button--secondary" onClick={findPlace}>SÖK</button></div><input value={spotifyUrl} onChange={e=>setSpotifyUrl(e.target.value)} placeholder="Klistra in Spotifylänk" />{preview && <small className="spotify-preview">♫ {preview.title} — {preview.artist}</small>}{point && <small>PLATS VALD ✓</small>}<button className="button button--primary button--wide" disabled={!prompt.trim() || !point || !spotifyUrl.trim()} onClick={save}>SPARA FRÅGA</button>{status && <small>{status}</small>}<div className="question-list__toolbar"><span>{questions.length} frågor · {selectedIds.length} valda</span><button className="button button--outline" disabled={!questions.length} onClick={toggleAll}>{allSelected ? "AVMARKERA ALLA" : "VÄLJ ALLA"}</button></div><div className="question-list">{questions.length ? questions.map(question=><label key={question.id}><input type="checkbox" checked={selectedIds.includes(question.id)} onChange={event=>toggleQuestion(question.id, event.target.checked)} /><span><strong>{question.spotify_title ?? "Spotifylänk"}</strong><small>{question.place_label}</small></span></label>) : <small>Inga sparade frågor ännu.</small>}</div><button className="button button--outline button--wide" disabled={!selectedIds.length} onClick={useSelected}>ANVÄND VALDA I QUIZET ({selectedIds.length})</button></div>;
   if (!showMap) return <div className="question-bank">{form}</div>;
   const previewPoint = point ? toPercent(point.longitude, point.latitude) : defaultAnswer;
-  const orderPanel = <div className="quiz-order-panel quiz-order-panel--external"><div className="eyebrow">QUIZORDNING</div><p className="muted">Dra låtarna i den ordning de ska spelas.</p><div className="quiz-order-list">{orderedSelectedQuestions.length ? orderedSelectedQuestions.map((question, index) => <div className={`quiz-order-item ${draggedId === question.id ? "quiz-order-item--dragging" : ""}`} key={question.id} draggable onDragStart={() => setDraggedId(question.id)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedId) moveQuestion(draggedId, question.id); setDraggedId(null); }} onDragEnd={() => setDraggedId(null)}><span className="quiz-order-handle">⠿</span><strong>{String(index + 1).padStart(2, "0")}</strong><span className="quiz-order-title"><b>{question.spotify_title ?? "Spotifylåt"}</b><small>{question.spotify_artist ?? question.place_label}</small></span></div>) : <small>Välj låtar i frågebanken för att bygga quizordningen.</small>}</div><button className="button button--primary button--wide" disabled={!orderedSelectedQuestions.length || !spotifyClientId} onClick={() => void createSpotifyPlaylist()}>{spotifyConnected ? "SKAPA SPOTIFY-SPELLISTA" : "KOPPLA SPOTIFY"}</button>{!spotifyClientId && <small className="spotify-config-note">Spotify behöver konfigureras innan spellistan kan skapas.</small>}{playlistStatus && <small className="playlist-status">{playlistStatus}</small>}{playlistUrl && <a className="playlist-link" href={playlistUrl} target="_blank" rel="noreferrer">ÖPPNA SPELLISTAN I SPOTIFY ↗</a>}</div>;
+  const orderPanel = <div className="quiz-order-panel quiz-order-panel--external"><div className="eyebrow">QUIZORDNING</div><p className="muted">Dra låtar och kategorirubriker i den ordning de ska spelas.</p><div className="quiz-category-form"><input value={categoryTitle} onChange={event => setCategoryTitle(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Ny kategori, t.ex. Bilar" /><button className="button button--secondary" onClick={addCategory}>LÄGG TILL</button></div><div className="quiz-order-list">{orderedItems.length ? orderedItems.map((item, index) => { const question = item.type === "question" ? questions.find(candidate => candidate.id === item.id) : null; if (item.type === "question" && !question) return null; return <div className={`quiz-order-item ${item.type === "category" ? "quiz-order-item--category" : ""} ${draggedId === item.id ? "quiz-order-item--dragging" : ""}`} key={item.id} draggable onDragStart={() => setDraggedId(item.id)} onDragOver={event => event.preventDefault()} onDrop={() => { if (draggedId) moveQuestion(draggedId, item.id); setDraggedId(null); }} onDragEnd={() => setDraggedId(null)}><span className="quiz-order-handle">⠿</span><strong>{String(index + 1).padStart(2, "0")}</strong>{item.type === "category" ? <span className="quiz-order-title"><b>▰ {item.title}</b><small>KATEGORI</small></span> : <span className="quiz-order-title"><b>{question?.spotify_title ?? "Spotifylåt"}</b><small>{question?.spotify_artist ?? question?.place_label}</small></span>}</div>; }) : <small>Välj låtar i frågebanken eller lägg till en kategori.</small>}</div><button className="button button--primary button--wide" disabled={!orderedSelectedQuestions.length || !spotifyClientId} onClick={() => void createSpotifyPlaylist()}>{spotifyConnected ? "SKAPA SPOTIFY-SPELLISTA" : "KOPPLA SPOTIFY"}</button>{!spotifyClientId && <small className="spotify-config-note">Spotify behöver konfigureras innan spellistan kan skapas.</small>}{playlistStatus && <small className="playlist-status">{playlistStatus}</small>}{playlistUrl && <a className="playlist-link" href={playlistUrl} target="_blank" rel="noreferrer">ÖPPNA SPELLISTAN I SPOTIFY ↗</a>}</div>;
   return <><div className="question-bank question-bank--with-map"><div className="question-editor-layout">{form}<div className="question-editor-map"><div className="eyebrow">PLATSKONTROLL</div><p className="muted">Sök fram platsen eller finjustera nålen direkt på kartan.</p><Map reveal={0} guesses={[]} answer={previewPoint} showAnswer={Boolean(point)} onPick={(x, y) => { const [longitude, latitude] = toLngLat({ x, y }); setPoint({ longitude, latitude }); }} /></div></div></div>{orderPanel}</>;
 }
 
@@ -353,7 +373,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => void
   return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="eyebrow">SPELLEDARINLOGGNING</div><h1>{creating ? "Skapa ditt konto" : "Logga in som spelledare"}</h1><p className="muted">Dina frågor och kartplatser sparas privat till ditt konto.</p><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="E-post" type="email" autoComplete="email" /><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="Lösenord" type="password" autoComplete={creating ? "new-password" : "current-password"} onKeyDown={e=>e.key === "Enter" && void submit()} /><button className="button button--primary button--wide" disabled={!email.trim() || password.length < 6} onClick={()=>void submit()}>{creating ? "SKAPA KONTO" : "LOGGA IN"}</button>{status && <small className="auth-status">{status}</small>}<button className="ghost auth-toggle" onClick={()=>{setCreating(value=>!value);setStatus("");}}>{creating ? "Jag har redan ett konto" : "Skapa nytt konto"}</button></section></main>;
 }
 
-function TvView({ roomCode, round, totalRounds, prompt, started, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; started: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
+function TvView({ roomCode, round, totalRounds, prompt, category, started, reveal, players, answer }: { roomCode: string; round: number; totalRounds: number; prompt: string; category: string; started: boolean; reveal: number; players: Guess[]; answer: { x: number; y: number } }) {
   const qrRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (started || !qrRef.current || !roomCode) return;
@@ -361,7 +381,7 @@ function TvView({ roomCode, round, totalRounds, prompt, started, reveal, players
   }, [roomCode, started]);
   const sortedPlayers = [...players].sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || distanceKm(a, answer) - distanceKm(b, answer));
   if (!started) return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">VÄNTAR PÅ START</div></header><section className="tv-lobby"><div className="eyebrow">ANSLUT TILL QUIZET</div><h1>Skanna för att delta</h1><canvas ref={qrRef} aria-label={`QR-kod för rum ${roomCode}`} /><div className="tv-room-code">{roomCode}</div><p>eller skriv in rumskoden på mobilen</p><strong>Spelledaren startar första frågan när alla är redo.</strong></section></main>;
-  return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">FRÅGA {String(round).padStart(2, "0")} AV {totalRounds}</div></header><section className="tv-content"><div className="tv-question">{prompt}</div><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 1} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><b>{player.score ?? 0} p</b></div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
+  return <main className="tv-shell"><header className="tv-header"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="tv-round">FRÅGA {String(round).padStart(2, "0")} AV {totalRounds}</div></header><section className="tv-content"><div className="tv-question">{category && <small className="tv-category">{category}</small>}{prompt}</div><div className="tv-grid"><div className="tv-map"><Map reveal={reveal} guesses={players} answer={answer} showAnswer={reveal >= 1} /></div><aside className="tv-scoreboard"><div className="eyebrow">STÄLLNING</div>{sortedPlayers.length ? sortedPlayers.map((player, index) => <div className={`tv-score-row ${index === 0 && reveal >= 3 ? "tv-score-row--winner" : ""}`} key={player.name}><strong>{String(index + 1).padStart(2, "0")}</strong><i style={{ background: player.color }} /><span>{player.name}</span><b>{player.score ?? 0} p</b></div>) : <p className="tv-empty">Väntar på spelare…</p>}</aside></div></section></main>;
 }
 
 export default function Home() {
@@ -388,9 +408,12 @@ export default function Home() {
   const [spotifyPreview, setSpotifyPreview] = useState<{ title: string; artist: string } | null>(null);
   const [questionStatus, setQuestionStatus] = useState("");
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [quizOrderItems, setQuizOrderItems] = useState<QuizOrderItem[]>([]);
   const [activeQuestions, setActiveQuestions] = useState<QuizQuestion[]>([]);
+  const [activeQuizOrder, setActiveQuizOrder] = useState<QuizOrderItem[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [broadcastPrompt, setBroadcastPrompt] = useState("Var i världen?");
+  const [broadcastCategory, setBroadcastCategory] = useState("");
   const [broadcastTotalRounds, setBroadcastTotalRounds] = useState(1);
   const sessionId = useState(() => typeof crypto === "undefined" ? Math.random().toString(36).slice(2) : crypto.randomUUID())[0];
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -410,8 +433,17 @@ export default function Home() {
   const sorted = useMemo(() => [...players].sort((a, b) => distanceKm(a, answer) - distanceKm(b, answer)), [players, answer]);
   const pickedLngLat = toLngLat(picked);
   const activePrompt = activeQuestions[activeQuestionIndex]?.prompt ?? "Var i världen?";
+  const activeCategory = useMemo(() => {
+    let category = "";
+    let questionIndex = -1;
+    for (const item of activeQuizOrder) {
+      if (item.type === "category") category = item.title;
+      else { questionIndex += 1; if (questionIndex === activeQuestionIndex) return category; }
+    }
+    return "";
+  }, [activeQuizOrder, activeQuestionIndex]);
   const roundTotal = Math.max(activeQuestions.length, 1);
-  const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt });
+  const roomStateRef = useRef({ roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory });
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -438,14 +470,18 @@ export default function Home() {
       setQuestions(loaded);
       if (mode === "host" && loaded.length && !activeQuestions.length) {
         let selected = loaded;
+        let selectedOrder: QuizOrderItem[] = loaded.map(question => ({ type: "question", id: question.id }));
         try {
           const stored = JSON.parse(window.localStorage.getItem(activeQuestionsStorageKey) ?? "[]") as QuizQuestion[];
           const storedSelection = Array.isArray(stored) ? stored.filter(question => loaded.some(candidate => candidate.id === question.id)) : [];
           if (storedSelection.length) selected = storedSelection;
+          const storedOrder = JSON.parse(window.localStorage.getItem(activeQuizOrderStorageKey) ?? "[]") as QuizOrderItem[];
+          if (Array.isArray(storedOrder) && storedOrder.length) selectedOrder = storedOrder.filter(item => item.type === "category" || (item.type === "question" && loaded.some(candidate => candidate.id === item.id)));
         } catch {
           // Use the loaded question list when no local selection is available.
         }
         setActiveQuestions(selected);
+        setActiveQuizOrder(selectedOrder.filter(item => item.type === "category" || selected.some(question => question.id === item.id)));
         setSelectedQuestionIds(selected.map(question => question.id));
         const first = selected[0];
         if (first) {
@@ -456,6 +492,20 @@ export default function Home() {
       }
     });
   }, [mode, user, activeQuestions.length]);
+
+  useEffect(() => {
+    if (mode !== "admin" || !questions.length) return;
+    try {
+      const storedOrder = JSON.parse(window.localStorage.getItem(activeQuizOrderStorageKey) ?? "[]") as QuizOrderItem[];
+      if (!Array.isArray(storedOrder) || !storedOrder.length) return;
+      const validOrder = storedOrder.filter(item => item.type === "category" || (item.type === "question" && questions.some(question => question.id === item.id)));
+      const ids = validOrder.filter((item): item is Extract<QuizOrderItem, { type: "question" }> => item.type === "question").map(item => item.id);
+      setQuizOrderItems(validOrder);
+      setSelectedQuestionIds(ids);
+    } catch {
+      // Ignore malformed quiz order data.
+    }
+  }, [mode, questions]);
 
   useEffect(() => {
     if (mode !== "host" || !questions.length) return;
@@ -480,8 +530,10 @@ export default function Home() {
     const selected = selectedQuestionIds.map(id => questions.find(question => question.id === id)).filter((question): question is QuizQuestion => Boolean(question));
     if (selected.length) window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(selected));
     else window.localStorage.removeItem(activeQuestionsStorageKey);
-    void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: selected } });
-  }, [mode, questions, selectedQuestionIds]);
+    if (quizOrderItems.length) window.localStorage.setItem(activeQuizOrderStorageKey, JSON.stringify(quizOrderItems));
+    else window.localStorage.removeItem(activeQuizOrderStorageKey);
+    void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: selected, items: quizOrderItems } });
+  }, [mode, questions, selectedQuestionIds, quizOrderItems]);
 
   useEffect(() => {
     const match = questionSpotifyUrl.match(/open\.spotify\.com\/(?:intl-[^/]+\/)?track\/([A-Za-z0-9]+)/);
@@ -540,8 +592,8 @@ export default function Home() {
   }, [scanOpen, roomCode]);
 
   useEffect(() => {
-    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt };
-  }, [roomCode, round, roundTotal, reveal, started, players, answer, activePrompt]);
+    roomStateRef.current = { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory };
+  }, [roomCode, round, roundTotal, reveal, started, players, answer, activePrompt, activeCategory]);
 
   useEffect(() => {
     const channel = supabase
@@ -559,12 +611,15 @@ export default function Home() {
         if (typeof payload.reveal === "number") setReveal(payload.reveal);
         if (typeof payload.started === "boolean") setStarted(payload.started);
         if (typeof payload.prompt === "string") setBroadcastPrompt(payload.prompt);
+        if (typeof payload.category === "string") setBroadcastCategory(payload.category);
         if (payload.answer && typeof payload.answer.x === "number" && typeof payload.answer.y === "number") setAnswer(payload.answer as { x: number; y: number });
       })
       .on("broadcast", { event: "active_questions" }, ({ payload }) => {
         if (mode !== "host" || !Array.isArray(payload?.questions)) return;
         const selected = payload.questions as QuizQuestion[];
+        const items = Array.isArray(payload.items) ? payload.items as QuizOrderItem[] : selected.map(question => ({ type: "question" as const, id: question.id }));
         setActiveQuestions(selected);
+        setActiveQuizOrder(items);
         setSelectedQuestionIds(selected.map(question => question.id));
         const first = selected[0];
         if (first) {
@@ -597,8 +652,8 @@ export default function Home() {
 
   useEffect(() => {
     if (mode !== "host" || !channelRef.current) return;
-    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, source: "host" } });
-  }, [mode, roomCode, round, roundTotal, reveal, started, players, answer, activePrompt]);
+    void channelRef.current.send({ type: "broadcast", event: "room_state", payload: { roomCode, round, totalRounds: roundTotal, reveal, started, players, answer, prompt: activePrompt, category: activeCategory, source: "host" } });
+  }, [mode, roomCode, round, roundTotal, reveal, started, players, answer, activePrompt, activeCategory]);
 
   const findAnswerPlace = async () => {
     const query = answerQuery.trim();
@@ -656,11 +711,12 @@ export default function Home() {
   };
 
   const useSelectedQuestions = () => {
-    const chosen = selectedQuestionIds.map(id => questions.find(question => question.id === id)).filter((question): question is QuizQuestion => Boolean(question));
+    const chosen = quizOrderItems.filter((item): item is Extract<QuizOrderItem, { type: "question" }> => item.type === "question").map(item => questions.find(question => question.id === item.id)).filter((question): question is QuizQuestion => Boolean(question));
     if (!chosen.length) return;
     window.localStorage.setItem(activeQuestionsStorageKey, JSON.stringify(chosen));
-    void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: chosen } });
-    setActiveQuestions(chosen); setActiveQuestionIndex(0); setRound(1); setReveal(0); setPlayers([]); setLocked(false);
+    window.localStorage.setItem(activeQuizOrderStorageKey, JSON.stringify(quizOrderItems));
+    void channelRef.current?.send({ type: "broadcast", event: "active_questions", payload: { questions: chosen, items: quizOrderItems } });
+    setActiveQuestions(chosen); setActiveQuizOrder(quizOrderItems); setActiveQuestionIndex(0); setRound(1); setReveal(0); setPlayers([]); setLocked(false);
     const first = chosen[0]; setAnswer(toPercent(first.longitude, first.latitude)); setAnswerLabel(first.place_label); setAnswerQuery(first.place_label);
   };
 
@@ -710,15 +766,15 @@ export default function Home() {
     });
   };
 
-  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
+  const bankProps: QuestionBankPanelProps = { questions, prompt: questionPrompt, setPrompt: setQuestionPrompt, place: questionPlaceQuery, setPlace: setQuestionPlaceQuery, spotifyUrl: questionSpotifyUrl, setSpotifyUrl: setQuestionSpotifyUrl, point: questionPoint, setPoint: setQuestionPoint, preview: spotifyPreview, status: questionStatus, selectedIds: selectedQuestionIds, setSelectedIds: setSelectedQuestionIds, orderItems: quizOrderItems, setOrderItems: setQuizOrderItems, findPlace: () => void findQuestionPlace(), save: () => void saveQuestion(), useSelected: useSelectedQuestions };
 
   if (mode !== "player" && mode !== "tv" && !authReady) return <main className="shell shell--auth"><section className="auth-card"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><p className="muted">Laddar spelledarpanelen...</p></section></main>;
   if (mode !== "player" && mode !== "tv" && !user) return <AuthScreen onAuthenticated={setUser} />;
   if (mode === "admin") return <AdminView bank={bankProps} onBack={()=>{ window.history.replaceState(null, "", "/"); setMode("host"); }} onLogout={()=>void supabase.auth.signOut()} />;
-  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} started={started} reveal={reveal} players={players} answer={answer} />;
+  if (mode === "tv") return <TvView roomCode={roomCode} round={round} totalRounds={broadcastTotalRounds} prompt={broadcastPrompt} category={broadcastCategory} started={started} reveal={reveal} players={players} answer={answer} />;
   if (mode === "player") return <main className="shell shell--player"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><button className="ghost" onClick={() => setMode("host")}>Spelledarvy</button></header><section className="player-card">
-    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">FRÅGA {String(round).padStart(2, "0")} AV {broadcastTotalRounds}</span></div><h2>{broadcastPrompt}</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={[]} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "QUIZET ÄR LÅST" : "LÅS SVAR"}</button></div></>}
+    {!joined ? <><div className="eyebrow">DU ÄR INBJUDEN TILL RUMMET</div><h1>Sätt din nål.<br/><em>Hitta rätt plats.</em></h1><p className="muted">Skanna QR-koden från spelledaren eller fyll i rumskoden.</p><input value={roomCodeInput} onChange={e=>setRoomCodeInput(e.target.value)} placeholder="Rumskod" autoFocus /><button className="button button--secondary button--wide" onClick={() => setScanOpen(true)}>SKANNA QR-KOD <span>⌁</span></button><input value={playerName} onChange={e=>setPlayerName(e.target.value)} onKeyDown={e=>e.key === "Enter" && joinRoom()} placeholder="Ditt namn" /><button className="button button--primary button--wide" disabled={!playerName.trim() || normalizeRoomCode(roomCodeInput) !== normalizeRoomCode(roomCode)} onClick={joinRoom}>ANSLUT TILL RUMMET <span>→</span></button><div className="room-pill">RUMSKODEN ÄR ENDAST <strong>{roomCode}</strong></div>{scanOpen && <div className="scan-modal" role="dialog" aria-modal="true" aria-label="Skanna QR-kod"><div className="scan-modal__card"><div className="eyebrow">SKANNA FÖR ATT ANSLUTA</div><h2>Rikta kameran mot QR-koden</h2><video ref={scanVideoRef} muted playsInline />{scanError && <p className="scan-error">{scanError}</p>}<div className="scan-modal__actions"><button className="button button--outline" onClick={() => setScanOpen(false)}>AVBRYT</button></div></div></div>}</> : <><div className="player-status"><span className="live-dot"/> ANSLUTEN SOM <strong>{playerName.toUpperCase()}</strong><span className="round-tag">FRÅGA {String(round).padStart(2, "0")} AV {broadcastTotalRounds}</span></div>{broadcastCategory && <div className="player-category">{broadcastCategory}</div>}<h2>{broadcastPrompt}</h2><p className="muted">Tryck på kartan för att placera din gissning.</p><Map reveal={reveal} guesses={[]} answer={answer} selected={picked} compact onPick={(x,y)=>!locked&&setPicked({x,y})}/><div className="player-actions"><div className="guess-readout"><span className="pin-dot"/> DIN GISSNING <strong>{Math.round(pickedLngLat[1])}°N, {Math.round(pickedLngLat[0])}°E</strong></div><button className={`button ${locked ? "button--locked" : "button--primary"}`} disabled={locked || reveal > 0} onClick={lockGuess}>{locked ? "SVAR LÅST ✓" : reveal > 0 ? "QUIZET ÄR LÅST" : "LÅS SVAR"}</button></div></>}
   </section></main>;
 
-  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>setStarted(true)} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div><h2>{activePrompt}</h2></div><div className="phase"><span className="phase-dot"/> {started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/><div className="reveal-controls"><button className="button button--outline" disabled={!started || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">FRÅGERESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
+  return <main className="shell"><header className="topbar"><div className="brand"><span className="brand__mark">✦</span><span>VÄRLDENS TONER</span></div><div className="topbar__center"><span className="live-dot"/> LIVEKVÄLL <span className="divider"/> RUM <strong>{roomCode}</strong></div><button className="ghost" onClick={()=>setMode("player")}>Spelarvy ↗</button></header><div className="host-layout"><aside className="sidebar"><div className="eyebrow">SPELLEDARPANEL</div><div className="round-card"><span>ANTAL FRÅGOR</span><strong>{roundTotal}</strong><small>frågor valda</small></div><div className="progress"><span style={{width:`${Math.min((round / roundTotal) * 100, 100)}%`}}/></div><div className="players-list"><div className="eyebrow">SPELARE <strong>{ready} ANSLUTNA</strong></div>{players.length ? players.map(p=><div className="player-row" key={p.name}><i style={{background:p.color}}/><span>{p.name}</span><b>{p.score ?? 0} P</b></div>) : <small className="players-empty">Inga spelare anslutna ännu</small>}</div><HostSessionPanel started={started} onStart={()=>setStarted(true)} /></aside><section className="stage"><div className="stage-head"><div><div className="eyebrow">KARTA · FRÅGA {String(round).padStart(2,"0")} AV {roundTotal}</div>{activeCategory && <div className="host-category">{activeCategory}</div>}<h2>{activePrompt}</h2></div><div className="phase"><span className="phase-dot"/> {started ? reveal === 0 ? "SVAR SAMLAS IN" : reveal === 1 ? "FACIT VISAS" : reveal === 2 ? "GISSNINGAR VISAS" : "RESULTAT" : "VÄNTAR PÅ START"}</div></div><Map reveal={reveal} guesses={players} answer={answer}/><div className="reveal-controls"><button className="button button--outline" disabled={!started || reveal < 1} onClick={()=>setReveal(0)}>↺ Återställ</button><button className={`button ${reveal >= 1 ? "button--done" : "button--primary"}`} disabled={!started} onClick={()=>setReveal(1)}>{reveal >= 1 ? "SVAR VISAS ✓" : "VISA SVAR"}</button><button className={`button ${reveal >= 2 ? "button--done" : "button--primary"}`} disabled={!started || reveal < 1} onClick={()=>setReveal(2)}>{reveal >= 2 ? "GISSNINGAR VISAS ✓" : "VISA SPELARNAS PLATSER"}</button><button className={`button ${reveal >= 3 ? "button--done" : "button--accent"}`} disabled={!started || reveal < 2} onClick={showDistanceAndAwardPoints}>{reveal >= 3 ? "AVSTÅND VISAS ✓" : "VISA AVSTÅND"}</button></div>{reveal >= 3 && <div className="results"><div className="results-head"><div><div className="eyebrow">FRÅGERESULTAT</div><h3>Närmast rätt plats</h3></div><button className="button button--primary" onClick={nextRound}>NÄSTA FRÅGA →</button></div><div className="result-grid">{sorted.map((p,i)=><div className={`result-row ${i===0?"result-row--winner":""}`} key={p.name}><strong>{String(i+1).padStart(2,"0")}</strong><i style={{background:p.color}}/><span>{p.name}{i===0&&<small> ★ VINNARE</small>}</span><b>{p.score ?? 0} P · {distanceKm(p, answer).toLocaleString("sv-SE")} km</b></div>)}</div></div>}</section></div></main>;
 }

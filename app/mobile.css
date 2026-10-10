@@ -143,6 +143,10 @@
 .quiz-order-title b, .quiz-order-title small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quiz-order-title small { margin-top: 3px; color: var(--muted); font: 10px 'DM Mono', monospace; }
 .quiz-order-panel .button { margin-top: 4px; }
+.quiz-category-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 10px; }
+.quiz-category-form input { min-width: 0; }
+.quiz-order-item--category { border-color: #d9ff7866; background: #d9ff7814; }
+.quiz-order-item--category .quiz-order-title b { color: var(--lime); }
 .spotify-config-note, .playlist-status { display: block; margin-top: 8px; color: var(--muted) !important; line-height: 1.45; }
 .playlist-status { color: var(--lime) !important; }
 .playlist-link { display: block; margin-top: 10px; color: var(--lime); font: 11px 'DM Mono', monospace; text-decoration: none; }
@@ -196,6 +200,8 @@
 .tv-round { color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .12em; }
 .tv-content { width: min(1500px, calc(100% - 80px)); margin: 0 auto; padding: 48px 0; }
 .tv-question { margin-bottom: 28px; color: var(--text); font-size: clamp(28px, 4vw, 58px); font-weight: 700; letter-spacing: -.05em; }
+.tv-category, .host-category, .player-category { display: block; margin-bottom: 7px; color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .14em; text-transform: uppercase; }
+.player-category { margin-top: 18px; }
 .tv-content h1 { max-width: 1100px; margin: 12px 0 34px; font-size: clamp(34px, 5vw, 76px); line-height: .98; letter-spacing: -.06em; }
 .tv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
 .tv-map .map-shell { aspect-ratio: 1.75; }
