@@ -463,7 +463,7 @@ export default function Home() {
     }
     const sidebar = document.querySelector(".sidebar");
     if (!sidebar || questionBankRootRef.current) return;
-    const mount = document.createElement("div"); mount.className = "question-bank-mount"; sidebar.appendChild(mount); questionBankMountRef.current = mount; questionBankRootRef.current = createRoot(mount);
+    const mount = document.createElement("div"); mount.className = "question-bank-mount"; const qrPanel = sidebar.querySelector(".room-qr"); if (qrPanel) sidebar.insertBefore(mount, qrPanel); else sidebar.appendChild(mount); questionBankMountRef.current = mount; questionBankRootRef.current = createRoot(mount);
     return () => { questionBankRootRef.current?.unmount(); questionBankRootRef.current = null; questionBankMountRef.current?.remove(); questionBankMountRef.current = null; };
   }, [mode, user]);
 
