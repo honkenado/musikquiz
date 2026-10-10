@@ -28,7 +28,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: "https://tiles.openfreemap.org/styles/bright",
+      style: "https://tiles.openfreemap.org/styles/liberty",
       center: [0, 18], zoom: 1.15, minZoom: 1, maxZoom: 6,
       attributionControl: false, dragRotate: false, touchPitch: false,
     });
