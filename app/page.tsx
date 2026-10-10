@@ -312,7 +312,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (mode !== "host" || !user) return;
+    if (!['host', 'admin'].includes(mode) || !user) return;
     void supabase.from("quiz_questions").select("id,prompt,place_label,latitude,longitude,spotify_url,spotify_title,spotify_artist").order("created_at", { ascending: false }).then(({ data, error }) => {
       if (!error && data) setQuestions(data as QuizQuestion[]);
     });
