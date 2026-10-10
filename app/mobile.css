@@ -127,7 +127,6 @@
 .admin-content .question-bank input { padding: 12px; }
 .question-editor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr); gap: 24px; align-items: start; }
 .question-editor-form { min-width: 0; }
-.question-editor-map-area { display: grid; grid-template-columns: minmax(0, 1fr) minmax(235px, .9fr); gap: 16px; align-items: start; min-width: 0; }
 .question-editor-map { min-width: 0; padding: 16px; border: 1px solid #64d7ff33; border-radius: 10px; background: #64d7ff08; }
 .question-editor-map .muted { margin: 8px 0 12px; font-size: 12px; }
 .question-editor-map .map-shell { aspect-ratio: 1.35; min-height: 320px; }
@@ -147,6 +146,8 @@
 .spotify-config-note, .playlist-status { display: block; margin-top: 8px; color: var(--muted) !important; line-height: 1.45; }
 .playlist-status { color: var(--lime) !important; }
 .playlist-link { display: block; margin-top: 10px; color: var(--lime); font: 11px 'DM Mono', monospace; text-decoration: none; }
+.quiz-order-panel--external { width: 100%; margin-top: 16px; }
+.quiz-order-panel--external .quiz-order-list { max-height: 430px; }
 
 .map-water-overlay { fill: #347b96; opacity: .92; }
 .map-land-overlay path { fill: #e6e6c4; opacity: .88; }
@@ -231,6 +232,5 @@
 
 @media (max-width: 800px) {
   .question-editor-layout { grid-template-columns: 1fr; }
-  .question-editor-map-area { grid-template-columns: 1fr; }
   .question-editor-map .map-shell { min-height: 260px; }
 }
