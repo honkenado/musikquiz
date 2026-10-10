@@ -186,13 +186,13 @@ export default function Home() {
   const roomStateRef = useRef({ round, reveal, players });
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       const scannedRoom = new URLSearchParams(window.location.search).get("room");
       if (!scannedRoom) return;
       setRoomCodeInput(scannedRoom);
       setMode("player");
-    });
-    return () => window.cancelAnimationFrame(frame);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
