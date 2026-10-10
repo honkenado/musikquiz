@@ -77,13 +77,13 @@
 }
 
 .map-border-lines--country path {
-  stroke: #b6c98c;
-  stroke-width: .85px;
-  opacity: .58;
+  stroke: #aebd91;
+  stroke-width: .75px;
+  opacity: .48;
 }
 
 .map-border-lines--state path {
-  stroke: #82b8bd;
-  stroke-width: 1px;
-  opacity: .62;
+  stroke: #78aeb4;
+  stroke-width: .85px;
+  opacity: .52;
 }

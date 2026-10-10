@@ -82,8 +82,20 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       };
       const countryFeatures = Array.isArray((countryBorders as { features?: unknown[] }).features) ? (countryBorders as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
       const stateFeatures = Array.isArray((usStates as { features?: unknown[] }).features) ? (usStates as { features: Array<{ geometry: { coordinates: unknown } }> }).features : [];
-      const paths = map.getZoom() >= 2.75 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
-      const statePaths = map.getZoom() >= 4
+      ["water"].forEach(layerId => {
+        if (map.getLayer(layerId)) {
+          map.setPaintProperty(layerId, "fill-color", "#174b56");
+          map.setPaintProperty(layerId, "fill-opacity", 0.9);
+        }
+      });
+      ["waterway_river", "waterway_other"].forEach(layerId => {
+        if (map.getLayer(layerId)) {
+          map.setPaintProperty(layerId, "line-color", "#4f9eaa");
+          map.setPaintProperty(layerId, "line-opacity", 0.78);
+        }
+      });
+      const paths = map.getZoom() >= 4 ? countryFeatures.map(feature => pathFor(feature.geometry.coordinates)).filter(Boolean) : [];
+      const statePaths = map.getZoom() >= 5.2
         ? stateFeatures.map(feature => pathFor(feature.geometry.coordinates, true)).filter(Boolean)
         : [];
       svg.setAttribute("viewBox", `0 0 ${container.clientWidth} ${container.clientHeight}`);
