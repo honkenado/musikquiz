@@ -176,6 +176,7 @@
 .tv-header { display: flex; justify-content: space-between; align-items: center; padding: 24px 42px; border-bottom: 1px solid var(--line); }
 .tv-round { color: var(--lime); font: 12px 'DM Mono', monospace; letter-spacing: .12em; }
 .tv-content { width: min(1500px, calc(100% - 80px)); margin: 0 auto; padding: 48px 0; }
+.tv-question { margin-bottom: 28px; color: var(--text); font-size: clamp(28px, 4vw, 58px); font-weight: 700; letter-spacing: -.05em; }
 .tv-content h1 { max-width: 1100px; margin: 12px 0 34px; font-size: clamp(34px, 5vw, 76px); line-height: .98; letter-spacing: -.06em; }
 .tv-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; align-items: start; }
 .tv-map .map-shell { aspect-ratio: 1.75; }
