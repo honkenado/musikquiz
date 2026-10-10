@@ -51,6 +51,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
   const bordersRef = useRef<SVGSVGElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onPickRef = useRef(onPick);
+  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     onPickRef.current = onPick;
@@ -89,6 +90,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       }
     });
     mapRef.current = map;
+    const readyTimer = window.setTimeout(() => setMapReady(true), 0);
     const drawBorders = () => {
       const svg = bordersRef.current;
       const container = containerRef.current;
@@ -149,7 +151,7 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
       if (pick) pick(...Object.values(toPercent(event.lngLat.lng, event.lngLat.lat)) as [number, number]);
     };
     map.on("click", handleClick);
-    return () => { map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); map.off("click", handleClick); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
+    return () => { window.clearTimeout(readyTimer); map.off("load", drawBorders); map.off("idle", drawBorders); map.off("move", drawBorders); map.off("resize", drawBorders); map.off("click", handleClick); map.remove(); bordersSvg.remove(); bordersRef.current = null; mapRef.current = null; };
   }, []);
 
   useEffect(() => {
@@ -166,9 +168,9 @@ function Map({ reveal, guesses, onPick, selected, compact = false }: { reveal: n
 
   return <div className={`map-shell ${compact ? "map-shell--compact" : ""}`}>
     <div ref={containerRef} className="map map--real" aria-label="Interaktiv världskarta" />
-    {selected && <OverlayMarker mapRef={mapRef} point={selected} className="map-pin--selected" label="DU" />}
-    {reveal >= 1 && guesses.map(guess => <OverlayMarker key={guess.name} mapRef={mapRef} point={guess} className="map-pin--player" label={guess.name} color={guess.color} />)}
-    {reveal >= 2 && <OverlayMarker mapRef={mapRef} point={answer} className="map-pin--answer" label="FACIT" />}
+    {mapReady && selected && <OverlayMarker mapRef={mapRef} point={selected} className="map-pin--selected" label="DU" />}
+    {mapReady && reveal >= 1 && guesses.map(guess => <OverlayMarker key={guess.name} mapRef={mapRef} point={guess} className="map-pin--player" label={guess.name} color={guess.color} />)}
+    {mapReady && reveal >= 2 && <OverlayMarker mapRef={mapRef} point={answer} className="map-pin--answer" label="FACIT" />}
   </div>;
 }
 
